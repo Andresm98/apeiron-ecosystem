@@ -1,6 +1,6 @@
 # ADR-004: Tools, MCP y memoria de conocimiento
 
-**Estado:** Aceptada como baseline de arquitectura  
+**Estado:** PENDIENTE  
 **Fecha:** 2026-10-03
 
 ## Contexto
@@ -35,4 +35,6 @@ El catálogo es auditable y cada agente recibe solo la mínima capacidad necesar
 
 ## Estado actual y brechas
 
-Existen parser lógico seguro, cliente arXiv, gateway MCP opcional, tool de memoria y adaptador Chroma. El store in-memory es léxico, la memoria de usuario depende de identidad autenticada y faltan especificación de retención/borrado, reranking híbrido y pruebas completas de aislamiento.
+Contrastado con el código: puertos `ToolPort`/`VectorStorePort`; tools `formal_logic_calculator` (parser sin `eval`, 8 variables), `mcp_public_api_tool` (arXiv allowlisted + MCP opcional) y `vector_memory_retriever`. Chroma filtra `user_id`+global; in-memory es léxico. Hay un test de aislamiento entre usuarios sobre el store in-memory.
+
+Sigue pendiente respecto a la decisión: recuperación híbrida semántica+léxica con rerank, retención/límites de tamaño, borrado operativo de memoria, y pruebas de aislamiento sobre Chroma.

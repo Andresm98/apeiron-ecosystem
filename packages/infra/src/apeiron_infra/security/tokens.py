@@ -1,4 +1,5 @@
-"""JWT (HS256) y hashing de contraseñas con bcrypt."""
+"""JWT (HS256) y hashing de contraseñas con bcrypt. Admite un secreto previo para rotación."""
+
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
@@ -10,8 +11,15 @@ class InvalidTokenError(Exception):
 
 
 class TokenService:
-    def __init__(self, secret: str, ttl_minutes: int = 60, algorithm: str = "HS256") -> None:
+    def __init__(
+        self,
+        secret: str,
+        ttl_minutes: int = 60,
+        algorithm: str = "HS256",
+        previous_secret: str | None = None,
+    ) -> None:
         self._secret, self._ttl, self._alg = secret, ttl_minutes, algorithm
+        self._previous = previous_secret
 
     def create(self, subject: str) -> str:
         now = datetime.now(UTC)
@@ -19,14 +27,21 @@ class TokenService:
         return jwt.encode(payload, self._secret, algorithm=self._alg)
 
     def decode(self, token: str) -> str:
-        try:
-            claims = jwt.decode(token, self._secret, algorithms=[self._alg])
-        except jwt.PyJWTError as exc:
-            raise InvalidTokenError(str(exc)) from exc
-        sub = claims.get("sub")
-        if not isinstance(sub, str):
-            raise InvalidTokenError("missing sub")
-        return sub
+        secrets = [self._secret]
+        if self._previous:
+            secrets.append(self._previous)
+        last_error: Exception | None = None
+        for secret in secrets:
+            try:
+                claims = jwt.decode(token, secret, algorithms=[self._alg])
+            except jwt.PyJWTError as exc:
+                last_error = exc
+                continue
+            sub = claims.get("sub")
+            if not isinstance(sub, str):
+                raise InvalidTokenError("missing sub")
+            return sub
+        raise InvalidTokenError(str(last_error) if last_error else "invalid token") from last_error
 
 
 def hash_password(password: str) -> str:

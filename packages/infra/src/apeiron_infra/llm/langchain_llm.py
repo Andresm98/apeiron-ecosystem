@@ -38,7 +38,7 @@ class LangChainLLM:
             extra={
                 "model": self._label,
                 "execution_time_ms": round((time.perf_counter() - started) * 1000, 1),
-                "token_usage": getattr(msg, "usage_metadata", None) or {},
+                "token_usage": getattr(msg, "usage_metadata", None) or None,
             },
         )
         return _text(msg.content)

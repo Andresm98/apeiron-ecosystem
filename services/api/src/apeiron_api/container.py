@@ -27,8 +27,9 @@ from apeiron_infra.memory.vector import (
 from apeiron_infra.observability.langsmith import configure_langsmith
 from apeiron_infra.observability.logging import configure_logging
 from apeiron_infra.resilience import CircuitBreaker
+from apeiron_infra.security.rate_limit import SlidingWindowLimiter
 from apeiron_infra.security.tokens import TokenService
-from apeiron_infra.security.users import InMemoryUserRepository, UserRepository
+from apeiron_infra.security.users import InMemoryUserRepository, SqliteUserRepository, UserRepository
 from apeiron_infra.tools.formal_logic import FormalLogicCalculator
 from apeiron_infra.tools.public_api import ArxivClient, McpPublicApiTool, McpSdkGateway
 from apeiron_infra.tools.vector_memory import VectorMemoryRetriever
@@ -40,6 +41,8 @@ class Container:
     facade: ChatUseCasePort
     tokens: TokenService
     users: UserRepository
+    memory: VectorStorePort
+    limiter: SlidingWindowLimiter
     http: httpx.AsyncClient
 
 
@@ -63,8 +66,24 @@ def _build_llm(s: Settings) -> LLMPort:
 
 def _build_store(s: Settings) -> VectorStorePort:
     if s.vector_backend == "chroma":
-        return ChromaVectorStore(s.chroma_host, s.chroma_port)
-    return InMemoryVectorStore()
+        return ChromaVectorStore(
+            s.chroma_host,
+            s.chroma_port,
+            max_docs_per_user=s.memory_max_docs_per_user,
+            semantic_weight=s.memory_semantic_weight,
+            lexical_weight=s.memory_lexical_weight,
+        )
+    return InMemoryVectorStore(
+        max_docs_per_user=s.memory_max_docs_per_user,
+        semantic_weight=s.memory_semantic_weight,
+        lexical_weight=s.memory_lexical_weight,
+    )
+
+
+def _build_users(s: Settings) -> UserRepository:
+    if s.users_db_path:
+        return SqliteUserRepository(s.users_db_path)
+    return InMemoryUserRepository()
 
 
 async def build_container(s: Settings) -> Container:
@@ -88,7 +107,7 @@ async def build_container(s: Settings) -> Container:
     llm = _build_llm(s)
     registry = AgentRegistry()
     registry.register(AnaximandroFactory())
-    registry.register(HeraclitoFactory())  # Sócrates/Anaxágoras: una línea más aquí
+    registry.register(HeraclitoFactory())
     specialists = registry.build_all(llm, tools, s.max_react_steps, s.tool_timeout_s)
     graph = build_graph(
         specialists,
@@ -100,7 +119,9 @@ async def build_container(s: Settings) -> Container:
     return Container(
         s,
         ApeironFacade(graph, store),
-        TokenService(s.jwt_secret, s.jwt_ttl_minutes),
-        InMemoryUserRepository(),
+        TokenService(s.jwt_secret, s.jwt_ttl_minutes, previous_secret=s.jwt_secret_previous),
+        _build_users(s),
+        store,
+        SlidingWindowLimiter(),
         http,
     )

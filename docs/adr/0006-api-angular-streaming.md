@@ -1,6 +1,6 @@
 # ADR-006: Contrato API, streaming y aplicación Angular
 
-**Estado:** Aceptada como baseline de arquitectura  
+**Estado:** COMPLETADO  
 **Fecha:** 2026-10-03
 
 ## Contexto
@@ -52,4 +52,6 @@ SSE simplifica el flujo unidireccional de generación y se integra con autentica
 
 ## Estado actual y brechas
 
-El API implementa REST/SSE. `apps/web` es Angular 22 standalone con login/registro, diez casos, modo consulta/debate, SSE cancelable y Agent State Viewer; `npm ci` y el build de producción generan `dist/apeiron-web/browser`. La UI muestra respuestas como texto interpolado y no interpreta HTML. Quedan pruebas de browser para el contrato SSE, accesibilidad y renderizado futuro de Markdown/KaTeX.
+Contrastado con el código: rutas `/v1/auth/register`, `/v1/auth/token`, `/v1/agents`, `/v1/chat` y `/v1/chat/stream`; `ChatRequest` valida pregunta y rondas; SSE con `text/event-stream` y `Cache-Control: no-cache`. Cliente Angular 22: diez casos tipados, auth, `fetch`+Bearer+`AbortController`, parser SSE y Agent State Viewer. Identidad sale del token, no del body.
+
+Extensiones documentadas y aún no hechas: Markdown/KaTeX, persistencia de historial en UI, pruebas de browser y tolerancia CRLF en el parser SSE (hoy delimita con `\n\n`). `app.routes.ts` está vacío porque la UI es un único componente.

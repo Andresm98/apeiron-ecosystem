@@ -14,7 +14,12 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:4200"]
 
     jwt_secret: str = DEV_SECRET
+    jwt_secret_previous: str | None = None
     jwt_ttl_minutes: int = 60
+    public_register: bool = True
+    users_db_path: str = ""
+    auth_rate_limit_per_min: int = Field(default=20, ge=0, le=1000)
+    chat_rate_limit_per_min: int = Field(default=30, ge=0, le=1000)
 
     llm_provider: str = "fake"  # fake | anthropic | openai | ...
     llm_model: str = "claude-sonnet-5-5"
@@ -34,6 +39,9 @@ class Settings(BaseSettings):
     vector_backend: str = "memory"  # memory | chroma
     chroma_host: str = "chroma"
     chroma_port: int = 8000
+    memory_max_docs_per_user: int = Field(default=200, ge=1, le=10_000)
+    memory_semantic_weight: float = Field(default=0.6, ge=0, le=1)
+    memory_lexical_weight: float = Field(default=0.4, ge=0, le=1)
     mcp_server_url: str | None = None
 
     langsmith_enabled: bool = False
@@ -44,4 +52,6 @@ class Settings(BaseSettings):
     def _no_dev_secret_in_prod(self) -> "Settings":
         if self.env == "prod" and self.jwt_secret == DEV_SECRET:
             raise ValueError("APEIRON_JWT_SECRET es obligatorio en prod")
+        if abs(self.memory_semantic_weight + self.memory_lexical_weight - 1.0) > 1e-6:
+            raise ValueError("los pesos semántico y léxico deben sumar 1")
         return self

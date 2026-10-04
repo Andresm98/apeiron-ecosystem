@@ -1,4 +1,6 @@
 """Circuit Breaker asíncrono: closed -> open -> half_open -> closed."""
+
+import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
@@ -22,6 +24,7 @@ class CircuitBreaker:
         self._clock = clock
         self._failures = 0
         self._opened_at: float | None = None
+        self._probe_lock = asyncio.Lock()
 
     @property
     def state(self) -> str:
@@ -32,12 +35,19 @@ class CircuitBreaker:
     async def call(self, fn: Callable[[], Awaitable[T]]) -> T:
         if self.state == "open":
             raise CircuitOpenError("circuit open")
-        was_half_open = self.state == "half_open"
+        if self.state == "half_open":
+            if self._probe_lock.locked():
+                raise CircuitOpenError("half-open probe in flight")
+            async with self._probe_lock:
+                return await self._invoke(fn, half_open=True)
+        return await self._invoke(fn, half_open=False)
+
+    async def _invoke(self, fn: Callable[[], Awaitable[T]], *, half_open: bool) -> T:
         try:
             result = await fn()
         except Exception:
             self._failures += 1
-            if was_half_open or self._failures >= self._threshold:
+            if half_open or self._failures >= self._threshold:
                 self._opened_at = self._clock()
             raise
         self._failures, self._opened_at = 0, None

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from apeiron_api.container import Container
-from apeiron_api.deps import current_user, get_container
+from apeiron_api.deps import current_user, enforce_chat_rate, get_container
 from apeiron_api.schemas import ChatRequest, ChatResponse
 from apeiron_core.application.context import request_ctx
 
@@ -27,7 +27,7 @@ async def agents(_: Annotated[str, Depends(current_user)]) -> dict[str, list[str
 @router.post("/chat")
 async def chat(
     body: ChatRequest,
-    _: Annotated[str, Depends(current_user)],
+    _: Annotated[str, Depends(enforce_chat_rate)],
     c: Annotated[Container, Depends(get_container)],
 ) -> ChatResponse:
     out = await c.facade.ask(body.question, body.mode, body.max_rounds)
@@ -39,7 +39,7 @@ async def chat(
 @router.post("/chat/stream")
 async def chat_stream(
     body: ChatRequest,
-    _: Annotated[str, Depends(current_user)],
+    _: Annotated[str, Depends(enforce_chat_rate)],
     c: Annotated[Container, Depends(get_container)],
 ) -> StreamingResponse:
     ctx = request_ctx.get()  # incluye user_id fijado por la dependencia

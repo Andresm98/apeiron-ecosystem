@@ -1,6 +1,6 @@
 # ADR-003: Topología LangGraph, supervisor y agentes ReAct
 
-**Estado:** COMPLETO  
+**Estado:** COMPLETADO  
 **Fecha:** 2026-10-03
 
 ## Contexto
@@ -34,4 +34,4 @@ Un grafo común simplifica control de coste, errores, callbacks y visualización
 
 ## Estado actual y brechas
 
-El grafo único implementa `single`/`debate`, fan-out, reducers, selección configurada de 1–4 participantes, rondas 1–4 y routing determinista por intención entre agentes habilitados (Anaximandro por defecto). Settings valida rondas por defecto, hasta 8 pasos ReAct, timeouts de nodo/herramienta y participantes. Un fallo o timeout de especialista genera un turno marcado `degraded` sin interrumpir el debate; si falla la síntesis, el fallback determinista solo expone turnos completados. El protocolo ReAct textual ejecuta exclusivamente nombres presentes en el conjunto permitido, no devuelve razonamiento sin una respuesta final válida y emite trazas públicas sin pensamientos ni argumentos de herramientas. Estas políticas están cubiertas por pruebas del núcleo y de API.
+Contrastado con el código: un único grafo LangGraph con `single`/`debate`, `Send` paralelo, `round_gate`, síntesis y degradación de especialista/síntesis. Settings limita rondas 1–4, pasos ReAct 1–8 y timeouts. ReAct solo ejecuta tools del catálogo inyectado y no expone `Thought` como respuesta. Cubierto por tests de núcleo y API. Sócrates/Anaxágoras no están registrados; se añaden por fábrica, no por cambio de supervisor.

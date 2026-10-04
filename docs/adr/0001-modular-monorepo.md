@@ -1,6 +1,6 @@
 # ADR-001: Monorepo modular y arquitectura limpia
 
-**Estado:** COMPLETO  
+**Estado:** COMPLETADO  
 **Fecha:** 2026-10-03
 
 ## Contexto
@@ -52,4 +52,4 @@ Se mantiene un único despliegue de API y se obtiene aislamiento lógico sin cos
 
 ## Estado actual y brechas
 
-La estructura modular y el composition root están implantados. `import-linter` verifica los cuatro contratos de capas en CI; los puertos permiten doubles en tests. `apps/web` es una aplicación Angular standalone instalable con autenticación, chat SSE y estado de agentes; CI ejecuta `npm ci` y build de producción. El build local también pasó con Node 24.15.0. Agentes adicionales como Sócrates o Anaxágoras siguen siendo extensiones de producto, no una brecha de arquitectura.
+Contrastado con el código: paquetes `packages/core`, `packages/infra` y `services/api`, composition root en `container.py`, puertos inbound/outbound y `.importlinter` con los cuatro contratos. CI ejecuta `lint-imports`. `apps/web` es Angular standalone; dashboard, chat y Agent State Viewer viven en un único componente raíz (`app.ts`), no en `features/`. No hay `apps/web/tests/`. Agentes adicionales (Sócrates, Anaxágoras) siguen siendo extensiones de producto.

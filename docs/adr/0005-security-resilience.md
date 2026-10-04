@@ -1,6 +1,6 @@
 # ADR-005: Autenticación, autorización y resiliencia
 
-**Estado:** Aceptada como baseline de arquitectura  
+**Estado:** PENDIENTE  
 **Fecha:** 2026-10-03
 
 ## Contexto
@@ -29,4 +29,6 @@ El diseño reduce abuso y limita fallos en cascada, pero JWT por sí mismo no pr
 
 ## Estado actual y brechas
 
-Hay JWT, bcrypt, límite de expiración, validación de secret de desarrollo en prod, timeouts, Tenacity y circuit breaker básicos. El repositorio de usuarios es in-memory; no se observan límites de tasa, rotación de claves ni breaker coordinado ante concurrencia half-open. Estos puntos son gates antes de una exposición pública de producción.
+Contrastado con el código: OAuth2 password + JWT (sub/exp, TTL 60 min), bcrypt, CORS configurado, token web solo en memoria, secret de desarrollo rechazado si `APEIRON_ENV=prod`, timeouts de nodo/LLM/tool, Tenacity y circuit breaker por dependencia. Fallback LLM si hay modelo alternativo. Errores de stream no filtran stack traces.
+
+Sigue pendiente respecto a la decisión: repositorio persistente de usuarios, límites de tasa en auth/chat, desactivar o proteger el registro público, rotación de clave JWT, jitter en reintentos y serialización de una sola prueba half-open concurrente.

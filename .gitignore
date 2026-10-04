@@ -8,3 +8,5 @@ node_modules/
 dist/
 .angular/
 .import_linter_cache/
+data/*.sqlite
+data/*.sqlite-*

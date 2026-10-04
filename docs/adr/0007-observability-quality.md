@@ -1,6 +1,6 @@
 # ADR-007: Observabilidad, pruebas y gates de calidad
 
-**Estado:** Aceptada como baseline de arquitectura  
+**Estado:** PENDIENTE  
 **Fecha:** 2026-10-03
 
 ## Contexto
@@ -29,4 +29,6 @@ El formato común permite correlación local y remota y mantiene trazabilidad si
 
 ## Estado actual y brechas
 
-Existe configuración JSON básica con algunos campos, y configuración opcional de LangSmith. `token_usage` no está garantizado por todos los proveedores. Hay tests Python básicos; no se encontró workflow `.github/workflows/ci.yml` ni suite web ejecutable. Deben completarse propagación contextual, redacción, suites y gates bloqueantes.
+Contrastado con el código: logging JSON a stdout con `trace_id`, `agent_name`, `state_transition`, `execution_time_ms` y `token_usage` cuando el extra lo aporta. Middleware de trace ID. LangSmith opcional y desactivado sin credenciales. `.github/workflows/ci.yml` ejecuta Ruff, mypy, import-linter y pytest en 3.12/3.13/3.14, más `npm ci` y build Angular. Hay tests de routing, ReAct, grafo, auth, retry/breaker, aislamiento in-memory y SSE.
+
+Sigue pendiente respecto a la decisión: suite Angular (parser/store/componentes), casos de evaluación de agente, test de sanitización Markdown/LaTeX, y `token_usage` nulo normalizado (hoy se registra `{}` si el proveedor no informa).

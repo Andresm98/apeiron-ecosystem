@@ -1,6 +1,6 @@
 # ADR-008: Contenedores, despliegue y CI/CD
 
-**Estado:** Aceptada como baseline de arquitectura  
+**Estado:** COMPLETADO  
 **Fecha:** 2026-10-03
 
 ## Contexto
@@ -29,4 +29,6 @@ Compose minimiza la carga operativa y se ajusta a un backend desplegable, pero n
 
 ## Estado actual y brechas
 
-Hay Dockerfiles multistage, Compose con referencias GHCR configurables, API/Chroma y perfil web, Nginx, healthcheck de API y una app Angular instalable. `EC2_HOST` es una variable no secreta; el usuario `ec2-user` y Chroma `chromadb/chroma:1.5.9` están fijados en el workflow CD. El pipeline no usa AWS API keys, ECR, OIDC o SSM. Antes de producción pública siguen pendientes persistencia de usuarios, TLS/firewall y pruebas operativas de backup/restauración.
+Contrastado con el código: `api.Dockerfile` multistage Python 3.14 no-root con healthcheck; `web.Dockerfile` Node 24 + Nginx 1.27; Compose con API, Chroma persistente (sin puerto público) y perfil web; Nginx sin buffering SSE. CI publica tags inmutables en GHCR; CD despliega por SSH con `AWS_SSH_PRIVATE_KEY` y `EC2_HOST`. Chroma fijado a `chromadb/chroma:1.5.9`.
+
+Gates operativos fuera de esta decisión de arquitectura: persistencia de usuarios, TLS/firewall reales y prueba de backup/restauración del volumen Chroma.

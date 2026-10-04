@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = ["apeiron-core", "tenacity>=8.2", "httpx>=0.27", "pyjwt>=2.8", "bcrypt>=4.1"]
 
 [project.optional-dependencies]
-llm = ["langchain>=0.3", "langchain-anthropic>=0.3"]
+llm = ["langchain>=0.3", "langchain-anthropic>=0.3", "langchain-openai>=0.3"]
 chroma = ["chromadb-client>=0.5"]
 mcp = ["mcp>=1.0"]
 

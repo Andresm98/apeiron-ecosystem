@@ -11,7 +11,9 @@ def configure_langsmith(enabled: bool, api_key: str | None, project: str) -> boo
             "LANGSMITH_TRACING": "true",
             "LANGSMITH_API_KEY": api_key,
             "LANGSMITH_PROJECT": project,
-            "LANGCHAIN_TRACING_V2": "true",  # compatibilidad con versiones previas
+            "LANGCHAIN_TRACING_V2": "true",
+            "LANGCHAIN_API_KEY": api_key,
+            "LANGCHAIN_PROJECT": project,
         }
     )
     return True

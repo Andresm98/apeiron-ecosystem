@@ -1,5 +1,5 @@
-from apeiron_core.domain.context import request_ctx
-from apeiron_core.domain.ports import VectorStorePort
+from apeiron_core.application.context import request_ctx
+from apeiron_core.application.ports.outbound.memory import VectorStorePort
 
 
 class VectorMemoryRetriever:
@@ -14,4 +14,6 @@ class VectorMemoryRetriever:
 
     async def run(self, tool_input: str) -> str:
         docs = await self._store.search(request_ctx.get().user_id, tool_input, self._k)
-        return "\n".join(f"- {d}" for d in docs) if docs else "Sin fragmentos relevantes."
+        return (
+            "\n".join(f"- {d}" for d in docs) if docs else "Sin fragmentos relevantes."
+        )

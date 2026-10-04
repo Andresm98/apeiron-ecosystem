@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from apeiron_api.container import Container
 from apeiron_api.deps import current_user, get_container
 from apeiron_api.schemas import ChatRequest, ChatResponse
-from apeiron_core.domain.context import request_ctx
+from apeiron_core.application.context import request_ctx
 
 router = APIRouter(prefix="/v1", tags=["chat"])
 log = logging.getLogger("apeiron.api")
@@ -26,15 +26,21 @@ async def agents(_: Annotated[str, Depends(current_user)]) -> dict[str, list[str
 
 @router.post("/chat")
 async def chat(
-    body: ChatRequest, _: Annotated[str, Depends(current_user)], c: Annotated[Container, Depends(get_container)]
+    body: ChatRequest,
+    _: Annotated[str, Depends(current_user)],
+    c: Annotated[Container, Depends(get_container)],
 ) -> ChatResponse:
     out = await c.facade.ask(body.question, body.mode, body.max_rounds)
-    return ChatResponse(answer=out["answer"], mode=out["mode"], turns=out["turns"], trace=out["trace"])
+    return ChatResponse(
+        answer=out["answer"], mode=out["mode"], turns=out["turns"], trace=out["trace"]
+    )
 
 
 @router.post("/chat/stream")
 async def chat_stream(
-    body: ChatRequest, _: Annotated[str, Depends(current_user)], c: Annotated[Container, Depends(get_container)]
+    body: ChatRequest,
+    _: Annotated[str, Depends(current_user)],
+    c: Annotated[Container, Depends(get_container)],
 ) -> StreamingResponse:
     ctx = request_ctx.get()  # incluye user_id fijado por la dependencia
 
@@ -48,5 +54,7 @@ async def chat_stream(
             yield sse("error", {"message": "internal_error", "trace_id": ctx.trace_id})
 
     return StreamingResponse(
-        events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

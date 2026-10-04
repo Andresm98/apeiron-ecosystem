@@ -1,0 +1,87 @@
+name: CD - Deploy Apeiron to EC2
+
+on:
+  workflow_run:
+    workflows: ["CI - Apeiron Ecosystem"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-apeiron-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to EC2 over SSH
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    env:
+      EC2_HOST: ${{ vars.EC2_HOST }}
+      EC2_SSH_USER: ec2-user
+      CHROMA_IMAGE: chromadb/chroma:1.5.9
+      IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+    steps:
+      - name: Checkout the commit that passed CI
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Validate deployment target
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${EC2_HOST:?Add EC2_HOST as a GitHub Actions repository variable}"
+          : "${GITHUB_REPOSITORY:?Repository name is missing}"
+
+      - name: Prepare SSH key and known hosts
+        id: ssh
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+          EC2_HOST: ${{ env.EC2_HOST }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          key_file="$RUNNER_TEMP/ec2-deploy-key"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$key_file"
+          chmod 600 "$key_file"
+          ssh-keyscan -H "$EC2_HOST" >> "$HOME/.ssh/known_hosts" 2>/dev/null
+          echo "key-file=$key_file" >> "$GITHUB_OUTPUT"
+
+      - name: Copy Compose and deploy script to EC2
+        env:
+          EC2_HOST: ${{ env.EC2_HOST }}
+          SSH_KEY_FILE: ${{ steps.ssh.outputs.key-file }}
+        run: |
+          scp -i "$SSH_KEY_FILE" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            deploy/docker-compose.yml \
+            deploy/scripts/deploy-ec2.sh \
+            "${EC2_SSH_USER}@${EC2_HOST}:/tmp/"
+
+      - name: Deploy the pinned release
+        env:
+          EC2_HOST: ${{ env.EC2_HOST }}
+          SSH_KEY_FILE: ${{ steps.ssh.outputs.key-file }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
+          remote_command="sudo -n env \
+            IMAGE_PREFIX='$image_prefix' \
+            IMAGE_TAG='$IMAGE_TAG' \
+            CHROMA_IMAGE='$CHROMA_IMAGE' \
+            DEPLOY_DIR='/opt/apeiron-ecosystem' \
+            bash /tmp/deploy-ec2.sh"
+
+          ssh -i "$SSH_KEY_FILE" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "${EC2_SSH_USER}@${EC2_HOST}" "$remote_command"

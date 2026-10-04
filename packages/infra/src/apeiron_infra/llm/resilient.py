@@ -1,7 +1,8 @@
 """Decorador de resiliencia: breaker( retry( timeout(primary) ) ) -> fallback."""
+
 import logging
 
-from apeiron_core.domain.ports import LLMPort
+from apeiron_core.application.ports.outbound.llm import LLMPort
 from apeiron_infra.resilience import CircuitBreaker, call_with_retry
 
 log = logging.getLogger("apeiron.llm")
@@ -19,7 +20,11 @@ class ResilientLLM:
     ) -> None:
         self._primary, self._fallback = primary, fallback
         self._breaker = breaker or CircuitBreaker()
-        self._attempts, self._base_delay, self._timeout = attempts, base_delay_s, timeout_s
+        self._attempts, self._base_delay, self._timeout = (
+            attempts,
+            base_delay_s,
+            timeout_s,
+        )
 
     async def complete(self, system: str, user: str) -> str:
         try:
@@ -34,7 +39,10 @@ class ResilientLLM:
         except Exception as exc:
             log.warning(
                 "llm_primary_failed",
-                extra={"error": type(exc).__name__, "breaker_state": self._breaker.state},
+                extra={
+                    "error": type(exc).__name__,
+                    "breaker_state": self._breaker.state,
+                },
             )
             if self._fallback is None:
                 raise

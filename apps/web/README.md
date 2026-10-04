@@ -1,17 +1,28 @@
-# apps/web — scaffold Angular
+# Angular web
 
-Aquí solo viven el **contrato con el API** y los servicios base; la UI (dashboard, consola, state viewer) la construyes en local.
+Cliente standalone Angular 22 para la API Ápeiron. Incluye registro/inicio de sesión, diez casos de estudio, consulta individual o debate, streaming SSE y visualización de las transiciones del grafo.
 
+## Desarrollo
+
+```sh
+npm ci
+npm start -- --proxy-config proxy.conf.json
 ```
-npx @angular/cli@latest new apeiron-web --standalone --routing --style=scss --directory=. --skip-git
-# luego copia/mezcla src/app/core/* y proxy.conf.json de este scaffold
-ng serve --proxy-config proxy.conf.json      # API en http://localhost:8000 (make run)
-```
-En `app.config.ts` añade `provideHttpClient()`. El build de producción debe llamarse `apeiron-web` (ver `deploy/docker/web.Dockerfile`).
 
-* `core/models.ts` — tipos de eventos SSE (`trace | turn | answer | error`).
-* `core/auth.service.ts` — register/login, token JWT en memoria.
-* `core/chat-stream.service.ts` — SSE sobre `fetch` (EventSource no permite POST ni cabecera Authorization).
-* `core/agent-state.store.ts` — estado reactivo (signals) para el Agent State Viewer: `trace`, `turns`, `answer`.
-* `core/use-cases.ts` — los 10 casos de uso precargados del dashboard.
-* Sugerido para la UI: `ngx-markdown` + `katex` (Markdown/LaTeX).
+Con la API en `http://localhost:8000` (`APEIRON_LLM_PROVIDER=fake make run` desde la raíz), abre `http://localhost:4200`.
+
+## Build
+
+```sh
+npm run build -- --configuration production
+```
+
+El artefacto queda en `dist/apeiron-web/browser`, que es la ruta servida por Nginx en `deploy/docker/web.Dockerfile`. Angular 22 requiere Node `^22.22.3` o `^24.15.0`; CI y Docker usan Node 24.
+
+## Módulos
+
+- `core/models.ts`: contrato tipado de requests, turnos y eventos SSE.
+- `core/auth.service.ts`: registro y JWT en memoria.
+- `core/chat-stream.service.ts`: SSE autenticado sobre `fetch` con cancelación.
+- `core/agent-state.store.ts`: estado reactivo de answer, turns, trace y errores.
+- `core/use-cases.ts`: casos precargados del dashboard.

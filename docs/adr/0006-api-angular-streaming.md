@@ -33,12 +33,14 @@ El stream usa `Content-Type: text/event-stream`, `Cache-Control: no-cache` y des
 
 Los frames SSE se parsean por delimitadores de evento, tolerando fragmentación entre chunks y fin de línea CRLF. La terminación normal completa el stream; desconectar cancela el trabajo si es seguro hacerlo. No se promete replay/reconexión sin cursor mientras no exista persistencia de eventos. Nunca se transmite `Thought` privado; solo estados como routing, thinking, tool execution, reflection y synthesis.
 
-El cliente objetivo es una app Angular standalone con routing y SCSS, versión fijada en lockfile. Su estructura contiene:
+El cliente es una app Angular standalone con routing y SCSS, versión fijada en lockfile. Su estructura contiene:
 
 - Dashboard con diez casos de uso precargados, seleccionables y con modo asociado.
-- Consola de chat que admite prompt libre, historial de la sesión visible, cancelación, Markdown y KaTeX.
+- Consola de chat que admite prompt libre, selección de modo, cancelación y renderizado de texto plano.
 - Agent State Viewer que consume `trace` y `turn`, muestra estado actual y conserva un orden estable.
 - Servicios separados para auth, API/stream, modelos y store reactivo; el token vive en memoria.
+
+El renderizado enriquecido de Markdown/KaTeX, persistencia del historial en la UI y evaluaciones automatizadas de calidad son extensiones futuras; no forman parte del primer cliente mínimo.
 
 Los diez casos de uso base son: paradoja de Fermi y ápeiron; entrelazamiento y monismo; problema de tres cuerpos; validez de modus ponens/falacia; ápeiron y energía oscura; devenir y flecha del tiempo; unidad de opuestos y dualidad onda-partícula; mundos innumerables y multiverso; literatura reciente de exoplanetas habitables; azar e indeterminismo cuántico. Se mantienen como datos tipados y prompts editables, no como ramas de lógica en la API.
 
@@ -50,4 +52,4 @@ SSE simplifica el flujo unidireccional de generación y se integra con autentica
 
 ## Estado actual y brechas
 
-El API implementa REST/SSE y el cliente tiene modelos, servicios base, casos y store scaffold. `apps/web` aún no contiene `package.json`, componentes Angular ni build completo. El desarrollo debe convertirlo en aplicación Angular funcional y probar framing fragmentado, cancelación, seguridad de renderizado y estados de error.
+El API implementa REST/SSE. `apps/web` es Angular 22 standalone con login/registro, diez casos, modo consulta/debate, SSE cancelable y Agent State Viewer; `npm ci` y el build de producción generan `dist/apeiron-web/browser`. La UI muestra respuestas como texto interpolado y no interpreta HTML. Quedan pruebas de browser para el contrato SSE, accesibilidad y renderizado futuro de Markdown/KaTeX.

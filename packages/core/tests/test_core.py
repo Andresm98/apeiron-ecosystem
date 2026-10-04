@@ -1,11 +1,15 @@
 from collections.abc import Mapping
 
-from apeiron_core.domain.agents.factories import AnaximandroFactory, HeraclitoFactory
-from apeiron_core.domain.agents.react import ReActAgent
-from apeiron_core.domain.ports import ToolPort
-from apeiron_core.orchestration.facade import ApeironFacade
-from apeiron_core.orchestration.graph import build_graph
-from apeiron_core.orchestration.registry import AgentRegistry
+from apeiron_core.application.agents.factories import (
+    AnaximandroFactory,
+    HeraclitoFactory,
+)
+from apeiron_core.application.agents.react import ReActAgent
+from apeiron_core.application.agents.registry import AgentRegistry
+from apeiron_core.application.orchestration.graph import build_graph
+from apeiron_core.application.ports.outbound.tools import ToolPort
+from apeiron_core.application.use_cases.chat import ApeironFacade
+from apeiron_core.domain.services.routing import decide_mode
 
 
 class StubLLM:
@@ -37,9 +41,16 @@ def make_graph(tools: Mapping[str, ToolPort] | None = None):
     return build_graph(reg.build_all(llm, tools), llm)
 
 
+def test_domain_routing_selects_interaction_mode():
+    assert decide_mode("¿Qué es el ápeiron?") == "single"
+    assert decide_mode("Debate: ¿qué explica mejor el cosmos?") == "debate"
+
+
 async def test_single_routes_to_default_agent():
     out = await make_graph().ainvoke({"question": "¿Qué es el ápeiron?"})
-    assert out["mode"] == "single" and [t["agent"] for t in out["turns"]] == ["anaximandro"]
+    assert out["mode"] == "single" and [t["agent"] for t in out["turns"]] == [
+        "anaximandro"
+    ]
 
 
 async def test_debate_two_agents_two_rounds_then_synthesis():
@@ -60,7 +71,10 @@ async def test_react_tool_cycle_with_reflection_and_events():
     answer = await agent.respond("¿válido?", [], events.append)
     assert answer == "Es válido (modus ponens)"
     assert "Observation: VALID(P->Q, P |- Q)" in llm.prompts[1]
-    assert events == ["[anaximandro Executing Tool: formal_logic_calculator]", "[anaximandro Reflecting]"]
+    assert events == [
+        "[anaximandro Executing Tool: formal_logic_calculator]",
+        "[anaximandro Reflecting]",
+    ]
 
 
 async def test_react_unknown_tool_does_not_crash():

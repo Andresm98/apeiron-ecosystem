@@ -33,4 +33,12 @@ export class AgentStateStore {
   }
 
   cancel(): void { this.sub?.unsubscribe(); this.status.set('idle'); }
+
+  clear(): void {
+    this.cancel();
+    this.trace.set([]);
+    this.turns.set([]);
+    this.answer.set('');
+    this.error.set(null);
+  }
 }

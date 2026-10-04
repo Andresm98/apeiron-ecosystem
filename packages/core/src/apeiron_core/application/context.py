@@ -1,4 +1,5 @@
-"""Contexto de petición propagado por ContextVar (user, sesión, trace)."""
+"""Contexto de ejecución propagado dentro de una petición."""
+
 from contextvars import ContextVar
 from dataclasses import dataclass
 
@@ -10,4 +11,6 @@ class RequestContext:
     trace_id: str = "-"
 
 
-request_ctx: ContextVar[RequestContext] = ContextVar("request_ctx", default=RequestContext())  # noqa: B039 (dataclass frozen)
+request_ctx: ContextVar[RequestContext] = ContextVar(
+    "request_ctx", default=RequestContext()  # noqa: B039 (dataclass frozen)
+)

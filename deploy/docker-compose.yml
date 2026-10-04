@@ -1,12 +1,13 @@
-# Uso: docker compose -f deploy/docker-compose.yml up --build            (api + chroma)
-#      docker compose -f deploy/docker-compose.yml --profile web up --build   (+ frontend Nginx)
+# Desarrollo: docker compose -f deploy/docker-compose.yml up --build
+# Producción: --profile web, imágenes ECR inyectadas por deploy-ec2.yml.
 services:
   api:
+    image: ${APEIRON_API_IMAGE:-apeiron-api:local}
     build:
       context: ..
       dockerfile: deploy/docker/api.Dockerfile
       args:
-        PYTHON_VERSION: "3.13"
+        PYTHON_VERSION: "3.14"
     env_file: ../.env
     environment:
       APEIRON_CHROMA_HOST: chroma
@@ -14,11 +15,11 @@ services:
     depends_on:
       - chroma
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     restart: unless-stopped
 
   chroma:
-    image: chromadb/chroma:latest   # fija una versión concreta en producción
+    image: ${APEIRON_CHROMA_IMAGE:-chromadb/chroma:1.5.9}
     environment:
       IS_PERSISTENT: "TRUE"
     volumes:
@@ -27,6 +28,7 @@ services:
 
   web:
     profiles: ["web"]
+    image: ${APEIRON_WEB_IMAGE:-apeiron-web:local}
     build:
       context: ..
       dockerfile: deploy/docker/web.Dockerfile

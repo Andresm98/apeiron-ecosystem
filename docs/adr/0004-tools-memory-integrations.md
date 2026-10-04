@@ -15,7 +15,7 @@ Anaximandro requiere verificación lógica, consulta de información científica
 
 ## Decisión
 
-Se adopta la alternativa 2. `core` define `ToolPort` y `VectorStorePort`; `infra` contiene las implementaciones y el composition root solo inyecta tools autorizadas por cada `AgentFactory`. El modelo nunca puede crear herramientas, elegir hosts arbitrarios ni ejecutar código o shell.
+Se adopta la alternativa 2. `application` define los puertos de salida `ToolPort` y `VectorStorePort`; `infra` contiene sus adaptadores y el composition root solo inyecta tools autorizadas por cada `AgentFactory`. El modelo nunca puede crear herramientas, elegir hosts arbitrarios ni ejecutar código o shell.
 
 Las tres tools iniciales son:
 

@@ -1,10 +1,13 @@
-"""Abstract Factory: una fábrica por agente; cada una elige sus propias tools."""
+"""Fábricas de aplicación: cada agente declara persona y tools permitidas."""
+
 from collections.abc import Mapping
 from typing import Protocol
 
-from apeiron_core.domain.agents.base import PhilosopherAgent
-from apeiron_core.domain.agents.react import ReActAgent
-from apeiron_core.domain.ports import LLMPort, SpecialistAgent, ToolPort
+from apeiron_core.application.agents.base import PhilosopherAgent
+from apeiron_core.application.agents.react import ReActAgent
+from apeiron_core.application.ports.outbound.agents import SpecialistAgent
+from apeiron_core.application.ports.outbound.llm import LLMPort
+from apeiron_core.application.ports.outbound.tools import ToolPort
 
 ANAXIMANDRO_PERSONA = (
     "Eres Anaximandro. Razonas desde el ápeiron: lo indeterminado e ilimitado, "
@@ -21,13 +24,19 @@ HERACLITO_PERSONA = (
 class AgentFactory(Protocol):
     name: str
 
-    def create(self, llm: LLMPort, tools: Mapping[str, ToolPort]) -> SpecialistAgent: ...
+    def create(
+        self, llm: LLMPort, tools: Mapping[str, ToolPort]
+    ) -> SpecialistAgent: ...
 
 
 def _build(
-    name: str, persona: str, wanted: tuple[str, ...], llm: LLMPort, tools: Mapping[str, ToolPort]
+    name: str,
+    persona: str,
+    wanted: tuple[str, ...],
+    llm: LLMPort,
+    tools: Mapping[str, ToolPort],
 ) -> SpecialistAgent:
-    selected = [tools[n] for n in wanted if n in tools]
+    selected = [tools[tool_name] for tool_name in wanted if tool_name in tools]
     if not selected:
         return PhilosopherAgent(name, persona, llm)
     return ReActAgent(name, persona, llm, selected)
@@ -35,7 +44,11 @@ def _build(
 
 class AnaximandroFactory:
     name = "anaximandro"
-    tools = ("formal_logic_calculator", "mcp_public_api_tool", "vector_memory_retriever")
+    tools = (
+        "formal_logic_calculator",
+        "mcp_public_api_tool",
+        "vector_memory_retriever",
+    )
 
     def create(self, llm: LLMPort, tools: Mapping[str, ToolPort]) -> SpecialistAgent:
         return _build(self.name, ANAXIMANDRO_PERSONA, self.tools, llm, tools)

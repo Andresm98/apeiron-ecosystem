@@ -1,7 +1,7 @@
 [project]
 name = "apeiron-core"
 version = "0.2.0"
-description = "Dominio + orquestación (sin web, sin proveedores). Solo depende de LangGraph."
+description = "Dominio y aplicación: casos de uso, puertos y orquestación LangGraph."
 requires-python = ">=3.12"
 dependencies = ["langgraph>=0.2"]
 

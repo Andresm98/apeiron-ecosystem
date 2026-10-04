@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Multistage: build de dependencias -> runtime ligero, usuario no-root.
-# Objetivo 3.14 (ADR-002); por defecto 3.13 hasta validar wheels. Cambiar con --build-arg PYTHON_VERSION=3.14
-ARG PYTHON_VERSION=3.13
+# Python 3.14 es el runtime de CI y producción (ADR-002).
+ARG PYTHON_VERSION=3.14
 
 FROM python:${PYTHON_VERSION}-slim AS builder
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1

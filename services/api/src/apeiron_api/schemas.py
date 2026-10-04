@@ -1,6 +1,8 @@
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
+
+from apeiron_core.domain.value_objects.mode import Mode
 
 
 class Credentials(BaseModel):
@@ -15,7 +17,7 @@ class TokenResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
-    mode: Literal["single", "debate"] | None = None
+    mode: Mode | None = None
     max_rounds: int | None = Field(default=None, ge=1, le=4)
 
 

@@ -6,4 +6,5 @@ __pycache__/
 .ruff_cache/
 node_modules/
 dist/
+.angular/
 .import_linter_cache/

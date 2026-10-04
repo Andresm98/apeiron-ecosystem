@@ -1,5 +1,5 @@
 # Requiere que apps/web sea un proyecto Angular real (ver apps/web/README.md).
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /web
 COPY apps/web/package*.json ./
 RUN npm ci

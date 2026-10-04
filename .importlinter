@@ -27,10 +27,20 @@ forbidden_modules =
     mcp
     tenacity
 
-[importlinter:contract:domain-is-framework-free]
-name = El dominio no conoce LangGraph ni la orquestación
+[importlinter:contract:domain-is-inner-layer]
+name = Dominio puro: no depende de aplicación ni de adaptadores
 type = forbidden
 source_modules = apeiron_core.domain
 forbidden_modules =
     langgraph
-    apeiron_core.orchestration
+    apeiron_core.application
+    apeiron_infra
+    apeiron_api
+
+[importlinter:contract:application-does-not-import-adapters]
+name = Aplicación independiente de infraestructura y presentación
+type = forbidden
+source_modules = apeiron_core.application
+forbidden_modules =
+    apeiron_infra
+    apeiron_api

@@ -1,4 +1,5 @@
-"""Grafo Ápeiron: supervisor -> fan-out de agentes -> round_gate -> síntesis."""
+"""Grafo de aplicación: supervisor -> agentes -> rondas -> síntesis."""
+
 import asyncio
 import logging
 import time
@@ -8,9 +9,12 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
-from apeiron_core.domain.ports import Emit, LLMPort, SpecialistAgent
-from apeiron_core.domain.routing import decide_mode
-from apeiron_core.orchestration.state import ApeironState
+from apeiron_core.application.orchestration.state import ApeironState
+from apeiron_core.application.ports.outbound.agents import SpecialistAgent
+from apeiron_core.application.ports.outbound.events import Emit
+from apeiron_core.application.ports.outbound.llm import LLMPort
+from apeiron_core.domain.entities.agent_turn import AgentTurn
+from apeiron_core.domain.services.routing import decide_mode
 
 log = logging.getLogger("apeiron.graph")
 SYNTH_PROMPT = (
@@ -22,9 +26,9 @@ SYNTH_PROMPT = (
 def _emitter() -> Emit:
     try:
         writer = get_stream_writer()
-    except Exception:  # fuera de contexto de streaming
-        return lambda _m: None
-    return lambda m: writer({"message": m})
+    except Exception:
+        return lambda _message: None
+    return lambda message: writer({"message": message})
 
 
 def build_graph(
@@ -40,20 +44,23 @@ def build_graph(
             Send(
                 "agent_turn",
                 {
-                    "agent": a,
+                    "agent": agent_name,
                     "question": state["question"],
                     "turns": state.get("turns", []),
                     "round": state["round"],
                 },
             )
-            for a in state["participants"]
+            for agent_name in state["participants"]
         ]
 
     async def supervisor(state: ApeironState) -> dict[str, Any]:
         mode = state.get("mode") or decide_mode(state["question"])
         participants = list(agents) if mode == "debate" else [default_agent]
         rounds = state.get("max_rounds") or default_rounds
-        log.info("route", extra={"agent_name": "apeiron", "state_transition": f"supervisor->{mode}"})
+        log.info(
+            "route",
+            extra={"agent_name": "apeiron", "state_transition": f"supervisor->{mode}"},
+        )
         return {
             "mode": mode,
             "participants": participants,
@@ -62,25 +69,32 @@ def build_graph(
             "trace": ["[Ápeiron Routing]"],
         }
 
-    async def agent_turn(p: dict[str, Any]) -> dict[str, Any]:
-        name: str = p["agent"]
+    async def agent_turn(payload: dict[str, Any]) -> dict[str, Any]:
+        name: str = payload["agent"]
         started = time.perf_counter()
         try:
             async with asyncio.timeout(node_timeout_s):
-                text = await agents[name].respond(p["question"], p["turns"], _emitter())
+                text = await agents[name].respond(
+                    payload["question"], payload["turns"], _emitter()
+                )
         except TimeoutError:
             text = f"[{name} no respondió dentro de {node_timeout_s:.0f}s]"
         log.info(
             "agent_turn",
             extra={
                 "agent_name": name,
-                "state_transition": f"agent_turn:r{p['round']}",
+                "state_transition": f"agent_turn:r{payload['round']}",
                 "execution_time_ms": round((time.perf_counter() - started) * 1000, 1),
             },
         )
+        turn: AgentTurn = {
+            "agent": name,
+            "round": payload["round"],
+            "text": text,
+        }
         return {
-            "turns": [{"agent": name, "round": p["round"], "text": text}],
-            "trace": [f"[{name} Thinking r{p['round']}]"],
+            "turns": [turn],
+            "trace": [f"[{name} Thinking r{payload['round']}]"],
         }
 
     async def round_gate(state: ApeironState) -> dict[str, Any]:
@@ -93,20 +107,22 @@ def build_graph(
         turns = state["turns"]
         if state["mode"] == "single":
             return {"answer": turns[0]["text"], "trace": ["[Response Generation]"]}
-        transcript = "\n".join(f"r{t['round']} {t['agent']}: {t['text']}" for t in turns)
+        transcript = "\n".join(
+            f"r{turn['round']} {turn['agent']}: {turn['text']}" for turn in turns
+        )
         return {
             "answer": await synthesizer.complete(SYNTH_PROMPT, transcript),
             "trace": ["[Synthesis]"],
         }
 
-    g = StateGraph(ApeironState)
-    g.add_node("supervisor", supervisor)
-    g.add_node("agent_turn", agent_turn)  # type: ignore[arg-type]  # payload de Send, no ApeironState
-    g.add_node("round_gate", round_gate)
-    g.add_node("synthesis", synthesis)
-    g.add_edge(START, "supervisor")
-    g.add_conditional_edges("supervisor", sends, ["agent_turn"])
-    g.add_edge("agent_turn", "round_gate")
-    g.add_conditional_edges("round_gate", after_gate, ["agent_turn", "synthesis"])
-    g.add_edge("synthesis", END)
-    return g.compile()
+    graph = StateGraph(ApeironState)
+    graph.add_node("supervisor", supervisor)
+    graph.add_node("agent_turn", agent_turn)  # type: ignore[arg-type]  # payload de Send, no ApeironState
+    graph.add_node("round_gate", round_gate)
+    graph.add_node("synthesis", synthesis)
+    graph.add_edge(START, "supervisor")
+    graph.add_conditional_edges("supervisor", sends, ["agent_turn"])
+    graph.add_edge("agent_turn", "round_gate")
+    graph.add_conditional_edges("round_gate", after_gate, ["agent_turn", "synthesis"])
+    graph.add_edge("synthesis", END)
+    return graph.compile()

@@ -11,11 +11,11 @@ El objetivo solicitado es Python 3.14.0 con FastAPI asíncrono, LangChain, LangG
 
 1. Fijar Python 3.14 inmediatamente y aceptar dependencias aún no verificadas.
 2. Mantener indefinidamente una versión anterior como objetivo.
-3. Definir Python 3.14 como runtime de producción objetivo y mantener un piso temporal explícito hasta verificar compatibilidad de toda la cadena.
+3. Promover Python 3.14 a runtime de producción y conservar explícitamente el piso de compatibilidad de las librerías.
 
 ## Decisión
 
-Python **3.14.0 es la versión objetivo** de producción. Durante la transición, los paquetes conservan `requires-python >=3.12`; la imagen por defecto puede usar 3.13 solo mientras 3.14 no pase los gates requeridos. Python 3.14 no se considerará soportado ni se promoverá por un job informativo: debe pasar instalación limpia, lint, tipos, tests y build de imagen. Al promoverlo, CI debe ejecutar la versión objetivo como gate bloqueante y actualizar el argumento por defecto de Docker; el piso mínimo solo se elevará en un ADR separado si se decide retirar 3.12/3.13.
+Python **3.14.0 es el runtime de producción**. Los paquetes mantienen `requires-python >=3.12`; CI ejecuta gates bloqueantes en 3.12, 3.13 y 3.14, y la imagen API usa Python 3.14 por defecto. La matriz completa debe pasar instalación limpia, lint, tipos, tests y build de imagen. El piso mínimo solo se elevará en un ADR separado si se decide retirar 3.12/3.13.
 
 El backend usa:
 
@@ -32,8 +32,8 @@ Angular será el cliente web standalone con versión estable fijada en `package-
 
 ## Consecuencias
 
-Se conserva compatibilidad transitoria con el entorno actual y se evita declarar compatibilidad con 3.14 sin evidencia. La matriz debe distinguir el piso soportado y el runtime objetivo; los jobs requeridos no usan `continue-on-error`. Las dependencias nativas pueden retrasar el cambio de imagen, no el objetivo arquitectónico.
+Python 3.14 queda cubierto por el mismo gate que los runtimes 3.12 y 3.13; ningún job de versión usa `continue-on-error`. La compatibilidad de dependencias nativas se comprueba en CI y en el build de imagen antes de desplegar.
 
 ## Estado actual y brechas
 
-Los paquetes declaran `>=3.12`; Docker usa 3.13 y permite cambiar a 3.14 manualmente. El repositorio aún no tiene un workflow visible que certifique 3.14. Antes de promoverlo deben pasar los gates anteriores en CI y estar disponibles las dependencias fijadas.
+Los paquetes declaran `>=3.12`; la imagen, CI y despliegue usan 3.14. LangChain emite actualmente un warning sobre compatibilidad de su capa Pydantic v1 en Python 3.14, aunque las pruebas pasan; debe vigilarse y resolverse al actualizar esa dependencia.

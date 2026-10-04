@@ -1,12 +1,18 @@
 """Patrón ReAct explícito: Thought -> Action -> Observation -> Reflect."""
+
 import asyncio
 import re
 from collections.abc import Sequence
 
-from apeiron_core.domain.agents.base import others_block
-from apeiron_core.domain.ports import Emit, LLMPort, ToolPort
+from apeiron_core.application.agents.base import others_block
+from apeiron_core.application.ports.outbound.events import Emit
+from apeiron_core.application.ports.outbound.llm import LLMPort
+from apeiron_core.application.ports.outbound.tools import ToolPort
+from apeiron_core.domain.entities.agent_turn import AgentTurn
 
-ACTION_RE = re.compile(r"Action:\s*(?P<tool>[\w\-]+)\s*\n\s*Action Input:\s*(?P<input>[^\n]+)")
+ACTION_RE = re.compile(
+    r"Action:\s*(?P<tool>[\w\-]+)\s*\n\s*Action Input:\s*(?P<input>[^\n]+)"
+)
 FINAL_RE = re.compile(r"Final Answer:\s*(?P<answer>.+)", re.S)
 
 FORMAT = """Usa EXACTAMENTE este formato.
@@ -34,12 +40,14 @@ class ReActAgent:
         self.name = name
         self._persona = persona
         self._llm = llm
-        self._tools = {t.name: t for t in tools}
+        self._tools = {tool.name: tool for tool in tools}
         self._max_steps = max_steps
         self._tool_timeout_s = tool_timeout_s
 
     def _system(self) -> str:
-        catalog = "\n".join(f"- {t.name}: {t.description}" for t in self._tools.values())
+        catalog = "\n".join(
+            f"- {tool.name}: {tool.description}" for tool in self._tools.values()
+        )
         return f"{self._persona}\n\nHerramientas disponibles:\n{catalog}\n\n{FORMAT}"
 
     async def _run_tool(self, tool_name: str, tool_input: str) -> str:
@@ -51,13 +59,13 @@ class ReActAgent:
                 return await tool.run(tool_input)
         except TimeoutError:
             return f"Error: la herramienta '{tool_name}' excedió {self._tool_timeout_s:.0f}s."
-        except Exception as exc:  # degradación: el agente se sobrepone al fallo de una tool
+        except Exception as exc:
             return f"Error en '{tool_name}': {exc}"
 
     async def respond(
-        self, question: str, history: list[dict[str, str]], emit: Emit | None = None
+        self, question: str, history: list[AgentTurn], emit: Emit | None = None
     ) -> str:
-        notify: Emit = emit or (lambda _m: None)
+        notify: Emit = emit or (lambda _message: None)
         base = question + others_block(self.name, history)
         scratch = ""
         last = ""
@@ -66,16 +74,16 @@ class ReActAgent:
             prompt = base + (f"\n\n{scratch}" if scratch else "")
             if force:
                 prompt += "\n\nDebes responder ahora con 'Final Answer:'."
-            out = (await self._llm.complete(self._system(), prompt)).strip()
-            last = out
-            action, final = ACTION_RE.search(out), FINAL_RE.search(out)
+            output = (await self._llm.complete(self._system(), prompt)).strip()
+            last = output
+            action, final = ACTION_RE.search(output), FINAL_RE.search(output)
             if final and not (action and action.start() < final.start()):
                 return final.group("answer").strip()
             if action is None or force:
-                return out
+                return output
             tool_name = action.group("tool")
             notify(f"[{self.name} Executing Tool: {tool_name}]")
             observation = await self._run_tool(tool_name, action.group("input").strip())
             notify(f"[{self.name} Reflecting]")
-            scratch += f"{out[: action.end()]}\nObservation: {observation}\n"
+            scratch += f"{output[: action.end()]}\nObservation: {observation}\n"
         return last

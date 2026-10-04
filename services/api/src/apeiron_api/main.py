@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from apeiron_api.container import Container, build_container
 from apeiron_api.routes import auth, chat
 from apeiron_api.settings import Settings
-from apeiron_core.domain.context import request_ctx
+from apeiron_core.application.context import request_ctx
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -24,7 +24,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Ápeiron Ecosystem API", version="0.2.0", lifespan=lifespan)
     app.add_middleware(
-        CORSMiddleware, allow_origins=cfg.cors_origins, allow_methods=["*"], allow_headers=["*"]
+        CORSMiddleware,
+        allow_origins=cfg.cors_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     @app.middleware("http")
@@ -44,5 +47,3 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(chat.router)
     return app
-
-

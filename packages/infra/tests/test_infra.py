@@ -1,12 +1,17 @@
 import httpx
 import pytest
 
-from apeiron_core.domain.context import RequestContext, request_ctx
+from apeiron_core.application.context import RequestContext, request_ctx
 from apeiron_infra.llm.langchain_llm import LangChainLLM
 from apeiron_infra.llm.resilient import ResilientLLM
 from apeiron_infra.memory.vector import InMemoryVectorStore, seed_global
 from apeiron_infra.resilience import CircuitBreaker, CircuitOpenError, call_with_retry
-from apeiron_infra.security.tokens import InvalidTokenError, TokenService, hash_password, verify_password
+from apeiron_infra.security.tokens import (
+    InvalidTokenError,
+    TokenService,
+    hash_password,
+    verify_password,
+)
 from apeiron_infra.tools.formal_logic import FormalLogicCalculator, evaluate
 from apeiron_infra.tools.public_api import ArxivClient, McpPublicApiTool
 from apeiron_infra.tools.vector_memory import VectorMemoryRetriever
@@ -30,7 +35,9 @@ class Const:
 
 async def test_retry_recovers_after_transient_failures():
     llm = Flaky(2)
-    out = await call_with_retry(lambda: llm.complete("", ""), attempts=3, base_delay_s=0.001)
+    out = await call_with_retry(
+        lambda: llm.complete("", ""), attempts=3, base_delay_s=0.001
+    )
     assert out == "ok" and llm.calls == 3
 
 
@@ -47,7 +54,9 @@ async def test_timeout_triggers_failure():
 
 async def test_breaker_opens_then_half_open_recovers():
     now = [0.0]
-    br = CircuitBreaker(failure_threshold=2, recovery_timeout_s=10, clock=lambda: now[0])
+    br = CircuitBreaker(
+        failure_threshold=2, recovery_timeout_s=10, clock=lambda: now[0]
+    )
     llm = Flaky(99)
     for _ in range(2):
         with pytest.raises(ConnectionError):
@@ -62,9 +71,17 @@ async def test_breaker_opens_then_half_open_recovers():
 
 
 async def test_resilient_llm_uses_fallback_when_primary_dies():
-    r = ResilientLLM(Flaky(99), Const(), CircuitBreaker(failure_threshold=1), attempts=2, base_delay_s=0.001)
+    r = ResilientLLM(
+        Flaky(99),
+        Const(),
+        CircuitBreaker(failure_threshold=1),
+        attempts=2,
+        base_delay_s=0.001,
+    )
     assert await r.complete("s", "u") == "fallback"
-    assert await r.complete("s", "u") == "fallback"  # circuito abierto -> directo a fallback
+    assert (
+        await r.complete("s", "u") == "fallback"
+    )  # circuito abierto -> directo a fallback
 
 
 def test_formal_logic_validity_and_tables():
@@ -85,9 +102,15 @@ ATOM = """<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>http://arxiv.org/
 
 
 async def test_public_api_tool_parses_arxiv_and_degrades_on_failure():
-    ok = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, text=ATOM)))
-    assert "Chaos in three-body" in await McpPublicApiTool(ArxivClient(ok)).run("three body")
-    bad = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+    ok = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, text=ATOM))
+    )
+    assert "Chaos in three-body" in await McpPublicApiTool(ArxivClient(ok)).run(
+        "three body"
+    )
+    bad = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda r: httpx.Response(503))
+    )
     out = await McpPublicApiTool(ArxivClient(bad)).run("x")
     assert "no disponible" in out
 

@@ -1,6 +1,6 @@
 # ADR-001: Monorepo modular y arquitectura limpia
 
-**Estado:** Aceptada como baseline de arquitectura  
+**Estado:** COMPLETO  
 **Fecha:** 2026-10-03
 
 ## Contexto
@@ -52,4 +52,4 @@ Se mantiene un único despliegue de API y se obtiene aislamiento lógico sin cos
 
 ## Estado actual y brechas
 
-El monorepo contiene dominio y aplicación separados dentro de `packages/core`; `packages/infra` y `services/api` son los adaptadores de salida y entrada. La API es el composition root; hay fábricas para Anaximandro y Heráclito. `apps/web` aún contiene contratos y servicios scaffold, no una aplicación Angular instalable. Los nuevos agentes mencionados en el producto (Sócrates, Anaxágoras, entre otros) son extensiones futuras.
+La estructura modular y el composition root están implantados. `import-linter` verifica los cuatro contratos de capas en CI; los puertos permiten doubles en tests. `apps/web` es una aplicación Angular standalone instalable con autenticación, chat SSE y estado de agentes; CI ejecuta `npm ci` y build de producción. El build local también pasó con Node 24.15.0. Agentes adicionales como Sócrates o Anaxágoras siguen siendo extensiones de producto, no una brecha de arquitectura.

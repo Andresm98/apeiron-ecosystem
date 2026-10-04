@@ -25,7 +25,11 @@ class AgentFactory(Protocol):
     name: str
 
     def create(
-        self, llm: LLMPort, tools: Mapping[str, ToolPort]
+        self,
+        llm: LLMPort,
+        tools: Mapping[str, ToolPort],
+        max_steps: int = 4,
+        tool_timeout_s: float = 20.0,
     ) -> SpecialistAgent: ...
 
 
@@ -35,11 +39,13 @@ def _build(
     wanted: tuple[str, ...],
     llm: LLMPort,
     tools: Mapping[str, ToolPort],
+    max_steps: int,
+    tool_timeout_s: float,
 ) -> SpecialistAgent:
     selected = [tools[tool_name] for tool_name in wanted if tool_name in tools]
     if not selected:
         return PhilosopherAgent(name, persona, llm)
-    return ReActAgent(name, persona, llm, selected)
+    return ReActAgent(name, persona, llm, selected, max_steps, tool_timeout_s)
 
 
 class AnaximandroFactory:
@@ -50,13 +56,41 @@ class AnaximandroFactory:
         "vector_memory_retriever",
     )
 
-    def create(self, llm: LLMPort, tools: Mapping[str, ToolPort]) -> SpecialistAgent:
-        return _build(self.name, ANAXIMANDRO_PERSONA, self.tools, llm, tools)
+    def create(
+        self,
+        llm: LLMPort,
+        tools: Mapping[str, ToolPort],
+        max_steps: int = 4,
+        tool_timeout_s: float = 20.0,
+    ) -> SpecialistAgent:
+        return _build(
+            self.name,
+            ANAXIMANDRO_PERSONA,
+            self.tools,
+            llm,
+            tools,
+            max_steps,
+            tool_timeout_s,
+        )
 
 
 class HeraclitoFactory:
     name = "heraclito"
     tools = ("vector_memory_retriever", "mcp_public_api_tool")
 
-    def create(self, llm: LLMPort, tools: Mapping[str, ToolPort]) -> SpecialistAgent:
-        return _build(self.name, HERACLITO_PERSONA, self.tools, llm, tools)
+    def create(
+        self,
+        llm: LLMPort,
+        tools: Mapping[str, ToolPort],
+        max_steps: int = 4,
+        tool_timeout_s: float = 20.0,
+    ) -> SpecialistAgent:
+        return _build(
+            self.name,
+            HERACLITO_PERSONA,
+            self.tools,
+            llm,
+            tools,
+            max_steps,
+            tool_timeout_s,
+        )

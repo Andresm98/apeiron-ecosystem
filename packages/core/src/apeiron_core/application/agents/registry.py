@@ -18,9 +18,13 @@ class AgentRegistry:
         self._factories[factory.name] = factory
 
     def build_all(
-        self, llm: LLMPort, tools: Mapping[str, ToolPort] | None = None
+        self,
+        llm: LLMPort,
+        tools: Mapping[str, ToolPort] | None = None,
+        max_steps: int = 4,
+        tool_timeout_s: float = 20.0,
     ) -> dict[str, SpecialistAgent]:
         return {
-            name: factory.create(llm, tools or {})
+            name: factory.create(llm, tools or {}, max_steps, tool_timeout_s)
             for name, factory in self._factories.items()
         }

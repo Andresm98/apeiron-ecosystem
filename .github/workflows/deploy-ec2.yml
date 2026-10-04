@@ -39,6 +39,18 @@ jobs:
           : "${EC2_HOST:?Add EC2_HOST as a GitHub Actions repository variable}"
           : "${GITHUB_REPOSITORY:?Repository name is missing}"
 
+      - name: Verify GHCR images are anonymously pullable
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
+          for image in apeiron-api apeiron-web; do
+            if ! docker manifest inspect "${image_prefix}/${image}:${IMAGE_TAG}" >/dev/null; then
+              echo "::error::Cannot pull ${image_prefix}/${image}:${IMAGE_TAG} anonymously. Confirm the GHCR package is public."
+              exit 1
+            fi
+          done
+
       - name: Prepare SSH key and known hosts
         id: ssh
         env:
@@ -66,6 +78,22 @@ jobs:
             deploy/scripts/deploy-ec2.sh \
             "${EC2_SSH_USER}@${EC2_HOST}:/tmp/"
 
+      - name: Check EC2 sudo and Docker Compose prerequisites
+        env:
+          EC2_HOST: ${{ env.EC2_HOST }}
+          SSH_KEY_FILE: ${{ steps.ssh.outputs.key-file }}
+        run: |
+          remote_check="sudo -n true || { echo 'ec2-user needs passwordless sudo' >&2; exit 20; }; \
+            sudo -n sh -c \"command -v docker >/dev/null || { echo 'Docker is not installed' >&2; exit 21; }; \
+            docker compose version || { echo 'Docker Compose plugin is unavailable' >&2; exit 22; }; \
+            test -r /opt/apeiron-ecosystem/.env || { echo 'Missing or unreadable /opt/apeiron-ecosystem/.env' >&2; exit 23; }\""
+          ssh -i "$SSH_KEY_FILE" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            "${EC2_SSH_USER}@${EC2_HOST}" "$remote_check"
+
       - name: Deploy the pinned release
         env:
           EC2_HOST: ${{ env.EC2_HOST }}
@@ -84,4 +112,6 @@ jobs:
           ssh -i "$SSH_KEY_FILE" \
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
             "${EC2_SSH_USER}@${EC2_HOST}" "$remote_command"

@@ -37,6 +37,10 @@ class ReActAgent:
         max_steps: int = 4,
         tool_timeout_s: float = 20.0,
     ) -> None:
+        if not 1 <= max_steps <= 8:
+            raise ValueError("max_steps debe estar entre 1 y 8")
+        if not 0 < tool_timeout_s <= 120:
+            raise ValueError("tool_timeout_s debe estar entre 0 y 120")
         self.name = name
         self._persona = persona
         self._llm = llm
@@ -80,7 +84,7 @@ class ReActAgent:
             if final and not (action and action.start() < final.start()):
                 return final.group("answer").strip()
             if action is None or force:
-                return output
+                return f"[{self.name}: no se obtuvo una respuesta final válida]"
             tool_name = action.group("tool")
             notify(f"[{self.name} Executing Tool: {tool_name}]")
             observation = await self._run_tool(tool_name, action.group("input").strip())

@@ -89,8 +89,13 @@ async def build_container(s: Settings) -> Container:
     registry = AgentRegistry()
     registry.register(AnaximandroFactory())
     registry.register(HeraclitoFactory())  # Sócrates/Anaxágoras: una línea más aquí
+    specialists = registry.build_all(llm, tools, s.max_react_steps, s.tool_timeout_s)
     graph = build_graph(
-        registry.build_all(llm, tools), llm, s.default_rounds, s.node_timeout_s
+        specialists,
+        llm,
+        s.default_rounds,
+        s.node_timeout_s,
+        debate_participants=s.debate_participants,
     )
     return Container(
         s,

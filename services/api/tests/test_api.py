@@ -2,6 +2,7 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from apeiron_api.main import create_app
 from apeiron_api.settings import Settings
@@ -9,14 +10,21 @@ from apeiron_api.settings import Settings
 
 @pytest.fixture
 def client():
-    settings = Settings(llm_provider="fake", jwt_secret="test-secret-test-secret-test-secret-0000")
+    settings = Settings(
+        llm_provider="fake", jwt_secret="test-secret-test-secret-test-secret-0000"
+    )
     with TestClient(create_app(settings)) as c:
         yield c
 
 
 def auth_headers(client: TestClient) -> dict[str, str]:
-    client.post("/v1/auth/register", json={"username": "santiago", "password": "clave-larga-123"})
-    r = client.post("/v1/auth/token", data={"username": "santiago", "password": "clave-larga-123"})
+    client.post(
+        "/v1/auth/register",
+        json={"username": "santiago", "password": "clave-larga-123"},
+    )
+    r = client.post(
+        "/v1/auth/token", data={"username": "santiago", "password": "clave-larga-123"}
+    )
     assert r.status_code == 200
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
@@ -28,7 +36,12 @@ def test_health_and_trace_header(client):
 
 def test_auth_required_and_bad_credentials(client):
     assert client.post("/v1/chat", json={"question": "hola"}).status_code == 401
-    assert client.post("/v1/auth/token", data={"username": "x", "password": "y"}).status_code == 401
+    assert (
+        client.post(
+            "/v1/auth/token", data={"username": "x", "password": "y"}
+        ).status_code
+        == 401
+    )
 
 
 def test_duplicate_registration_conflicts(client):
@@ -38,23 +51,55 @@ def test_duplicate_registration_conflicts(client):
 
 
 def test_chat_debate_returns_turns_and_trace(client):
-    r = client.post("/v1/chat", json={"question": "tres cuerpos", "mode": "debate", "max_rounds": 1},
-                    headers=auth_headers(client))
+    r = client.post(
+        "/v1/chat",
+        json={"question": "tres cuerpos", "mode": "debate", "max_rounds": 1},
+        headers=auth_headers(client),
+    )
     body = r.json()
     assert r.status_code == 200 and body["mode"] == "debate" and len(body["turns"]) == 2
-    assert body["trace"][0] == "[Ápeiron Routing]" and body["trace"][-1] == "[Synthesis]"
+    assert (
+        body["trace"][0] == "[Ápeiron Routing]" and body["trace"][-1] == "[Synthesis]"
+    )
 
 
 def test_chat_stream_sse_contract(client):
-    with client.stream("POST", "/v1/chat/stream", json={"question": "Debate: Fermi", "max_rounds": 1},
-                       headers=auth_headers(client)) as r:
+    with client.stream(
+        "POST",
+        "/v1/chat/stream",
+        json={"question": "Debate: Fermi", "max_rounds": 1},
+        headers=auth_headers(client),
+    ) as r:
         assert r.headers["content-type"].startswith("text/event-stream")
         frames = [f for f in r.read().decode().split("\n\n") if f]
     events = [f.splitlines()[0].removeprefix("event: ") for f in frames]
     assert events[0] == "trace" and events[-1] == "answer" and events.count("turn") == 2
-    assert json.loads(frames[-1].splitlines()[1].removeprefix("data: "))["mode"] == "debate"
+    assert (
+        json.loads(frames[-1].splitlines()[1].removeprefix("data: "))["mode"]
+        == "debate"
+    )
 
 
 def test_validation_rejects_bad_rounds(client):
-    r = client.post("/v1/chat", json={"question": "x", "max_rounds": 99}, headers=auth_headers(client))
+    r = client.post(
+        "/v1/chat",
+        json={"question": "x", "max_rounds": 99},
+        headers=auth_headers(client),
+    )
     assert r.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"default_rounds": 0},
+        {"default_rounds": 5},
+        {"node_timeout_s": 301},
+        {"max_react_steps": 9},
+        {"tool_timeout_s": 121},
+        {"debate_participants": []},
+    ],
+)
+def test_runtime_settings_enforce_hard_limits(override):
+    with pytest.raises(ValidationError):
+        Settings(**override)

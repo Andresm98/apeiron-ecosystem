@@ -31,6 +31,8 @@ Al hacer públicos los paquetes, la imagen API (que incluye los módulos Python 
 4. GitHub copia `docker-compose.yml` y `deploy/scripts/deploy-ec2.sh` a EC2. No se necesita acceso al repositorio desde la instancia.
 5. El script remoto descarga las dos imágenes públicas de ese tag, levanta el perfil `web` con Compose y comprueba `/healthz`. Chroma queda fijado a `chromadb/chroma:1.5.9`.
 
+Antes del deploy, CD verifica acceso SSH, `sudo -n`, Docker Compose y lectura de `/opt/apeiron-ecosystem/.env`. Si el paso remoto falla, el log incluye la etapa y línea aproximada del script; GHCR también se comprueba anónimamente antes de abrir SSH.
+
 Pull requests no publican ni despliegan. Un solo host puede tener una interrupción breve durante la recreación de contenedores. Para rollback, vuelve a ejecutar el deploy de un tag GHCR anterior. El escaneo SSH de primera conexión usa `ssh-keyscan`; para una política de host-key estricta, añade el fingerprint conocido de la instancia.
 
 La app Angular se construye en CI y el artefacto servido queda en `dist/apeiron-web/browser`. Termina TLS en un balanceador o proxy delante de Nginx y conserva el SSE sin buffering. Antes de producción pública sigue pendiente reemplazar `InMemoryUserRepository` por persistencia y validar backups de Chroma.

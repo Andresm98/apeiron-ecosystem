@@ -7,3 +7,4 @@ class AgentTurn(TypedDict):
     agent: str
     round: int
     text: str
+    degraded: bool

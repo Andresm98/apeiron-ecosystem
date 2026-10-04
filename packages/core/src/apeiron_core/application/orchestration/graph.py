@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import time
+from collections.abc import Sequence
 from typing import Any
 
 from langgraph.config import get_stream_writer
@@ -14,7 +15,7 @@ from apeiron_core.application.ports.outbound.agents import SpecialistAgent
 from apeiron_core.application.ports.outbound.events import Emit
 from apeiron_core.application.ports.outbound.llm import LLMPort
 from apeiron_core.domain.entities.agent_turn import AgentTurn
-from apeiron_core.domain.services.routing import decide_mode
+from apeiron_core.domain.services.routing import decide_agent, decide_mode
 
 log = logging.getLogger("apeiron.graph")
 SYNTH_PROMPT = (
@@ -36,7 +37,24 @@ def build_graph(
     synthesizer: LLMPort,
     default_rounds: int = 2,
     node_timeout_s: float = 60.0,
+    debate_participants: Sequence[str] | None = None,
 ) -> Any:
+    if not agents:
+        raise ValueError("Se requiere al menos un agente registrado")
+    if not 1 <= default_rounds <= 4:
+        raise ValueError("default_rounds debe estar entre 1 y 4")
+    if not 0 < node_timeout_s <= 300:
+        raise ValueError("node_timeout_s debe estar entre 0 y 300")
+    selected_participants = list(debate_participants or agents)
+    if (
+        not selected_participants
+        or len(selected_participants) > 4
+        or len(set(selected_participants)) != len(selected_participants)
+        or any(name not in agents for name in selected_participants)
+    ):
+        raise ValueError(
+            "debate_participants debe contener de 1 a 4 agentes registrados y únicos"
+        )
     default_agent = next(iter(agents))
 
     def sends(state: ApeironState) -> list[Send]:
@@ -55,8 +73,15 @@ def build_graph(
 
     async def supervisor(state: ApeironState) -> dict[str, Any]:
         mode = state.get("mode") or decide_mode(state["question"])
-        participants = list(agents) if mode == "debate" else [default_agent]
-        rounds = state.get("max_rounds") or default_rounds
+        participants = (
+            selected_participants
+            if mode == "debate"
+            else [decide_agent(state["question"], agents, default_agent)]
+        )
+        rounds = state.get("max_rounds")
+        rounds = default_rounds if rounds is None else rounds
+        if not 1 <= rounds <= 4:
+            raise ValueError("max_rounds debe estar entre 1 y 4")
         log.info(
             "route",
             extra={"agent_name": "apeiron", "state_transition": f"supervisor->{mode}"},
@@ -72,6 +97,7 @@ def build_graph(
     async def agent_turn(payload: dict[str, Any]) -> dict[str, Any]:
         name: str = payload["agent"]
         started = time.perf_counter()
+        degraded = False
         try:
             async with asyncio.timeout(node_timeout_s):
                 text = await agents[name].respond(
@@ -79,6 +105,11 @@ def build_graph(
                 )
         except TimeoutError:
             text = f"[{name} no respondió dentro de {node_timeout_s:.0f}s]"
+            degraded = True
+        except Exception:
+            log.warning("agent_turn_failed", extra={"agent_name": name})
+            text = f"[{name}: turno degradado por un fallo del agente]"
+            degraded = True
         log.info(
             "agent_turn",
             extra={
@@ -91,6 +122,7 @@ def build_graph(
             "agent": name,
             "round": payload["round"],
             "text": text,
+            "degraded": degraded,
         }
         return {
             "turns": [turn],
@@ -110,8 +142,22 @@ def build_graph(
         transcript = "\n".join(
             f"r{turn['round']} {turn['agent']}: {turn['text']}" for turn in turns
         )
+        try:
+            async with asyncio.timeout(node_timeout_s):
+                answer = await synthesizer.complete(SYNTH_PROMPT, transcript)
+        except Exception:
+            log.warning("synthesis_failed", extra={"turn_count": len(turns)})
+            completed = [turn for turn in turns if not turn["degraded"]]
+            if completed:
+                transcript = "\n".join(
+                    f"r{turn['round']} {turn['agent']}: {turn['text']}"
+                    for turn in completed
+                )
+                answer = f"Síntesis degradada; turnos completados:\n{transcript}"
+            else:
+                answer = "Síntesis degradada; ningún especialista completó un turno."
         return {
-            "answer": await synthesizer.complete(SYNTH_PROMPT, transcript),
+            "answer": answer,
             "trace": ["[Synthesis]"],
         }
 

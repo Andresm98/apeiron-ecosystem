@@ -1,11 +1,13 @@
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEV_SECRET = "dev-insecure-secret-change-me-before-prod-0000"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="APEIRON_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="APEIRON_", env_file=".env", extra="ignore"
+    )
 
     env: str = "dev"
     log_level: str = "INFO"
@@ -21,8 +23,13 @@ class Settings(BaseSettings):
     llm_retries: int = 3
     breaker_failures: int = 5
     breaker_recovery_s: float = 30.0
-    node_timeout_s: float = 90.0
-    default_rounds: int = 2
+    node_timeout_s: float = Field(default=90.0, gt=0, le=300)
+    default_rounds: int = Field(default=2, ge=1, le=4)
+    max_react_steps: int = Field(default=4, ge=1, le=8)
+    tool_timeout_s: float = Field(default=20.0, gt=0, le=120)
+    debate_participants: list[str] = Field(
+        default_factory=lambda: ["anaximandro", "heraclito"], min_length=1, max_length=4
+    )
 
     vector_backend: str = "memory"  # memory | chroma
     chroma_host: str = "chroma"

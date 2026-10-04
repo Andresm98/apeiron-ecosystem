@@ -1,6 +1,6 @@
 # ADR-003: Topología LangGraph, supervisor y agentes ReAct
 
-**Estado:** Aceptada como baseline de arquitectura  
+**Estado:** COMPLETO  
 **Fecha:** 2026-10-03
 
 ## Contexto
@@ -34,4 +34,4 @@ Un grafo común simplifica control de coste, errores, callbacks y visualización
 
 ## Estado actual y brechas
 
-El grafo único, modos `single`/`debate`, fan-out, reducer de turnos, límite 1–4 y síntesis ya están presentes. El enrutamiento actual usa una regla simple; la selección semántica por intención, la degradación de síntesis y los límites de participantes/pasos deben mantenerse explícitos y probarse. El agente ReAct actual usa un protocolo de texto; la futura integración LangChain debe conservar la validación estricta de nombres/argumentos y no ejecutar texto arbitrario.
+El grafo único implementa `single`/`debate`, fan-out, reducers, selección configurada de 1–4 participantes, rondas 1–4 y routing determinista por intención entre agentes habilitados (Anaximandro por defecto). Settings valida rondas por defecto, hasta 8 pasos ReAct, timeouts de nodo/herramienta y participantes. Un fallo o timeout de especialista genera un turno marcado `degraded` sin interrumpir el debate; si falla la síntesis, el fallback determinista solo expone turnos completados. El protocolo ReAct textual ejecuta exclusivamente nombres presentes en el conjunto permitido, no devuelve razonamiento sin una respuesta final válida y emite trazas públicas sin pensamientos ni argumentos de herramientas. Estas políticas están cubiertas por pruebas del núcleo y de API.

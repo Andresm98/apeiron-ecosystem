@@ -1,6 +1,6 @@
 # ADR-002: Runtime y stack tecnológico
 
-**Estado:** Aceptada como baseline de arquitectura  
+**Estado:** COMPLETO  
 **Fecha:** 2026-10-03
 
 ## Contexto
@@ -36,4 +36,4 @@ Python 3.14 queda cubierto por el mismo gate que los runtimes 3.12 y 3.13; ning�
 
 ## Estado actual y brechas
 
-Los paquetes declaran `>=3.12`; la imagen, CI y despliegue usan 3.14. LangChain emite actualmente un warning sobre compatibilidad de su capa Pydantic v1 en Python 3.14, aunque las pruebas pasan; debe vigilarse y resolverse al actualizar esa dependencia.
+Los paquetes declaran `>=3.12`; CI ejecuta instalación, Ruff, mypy y tests en Python 3.12, 3.13 y 3.14, y la imagen/despliegue usan Python 3.14. En esta revisión, los 34 tests backend pasaron en Python 3.14. La advertencia de LangChain sobre Pydantic v1 en Python 3.14 sigue siendo no bloqueante y debe revisarse al actualizar esa dependencia. Python 3.13 está instalado localmente, pero su entorno no tiene pytest; Python 3.12 no está instalado. La matriz reproducible queda a cargo del gate de CI.

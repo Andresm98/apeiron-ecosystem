@@ -139,6 +139,11 @@ def build_graph(
         turns = state["turns"]
         if state["mode"] == "single":
             return {"answer": turns[0]["text"], "trace": ["[Response Generation]"]}
+        if turns and all(t.get("degraded") for t in turns):
+            return {
+                "answer": "Síntesis degradada; ningún especialista completó un turno.",
+                "trace": ["[Synthesis]"],
+            }
         transcript = "\n".join(
             f"r{turn['round']} {turn['agent']}: {turn['text']}" for turn in turns
         )

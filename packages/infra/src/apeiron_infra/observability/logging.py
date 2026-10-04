@@ -27,9 +27,11 @@ class JsonFormatter(logging.Formatter):
         }
         for key, value in record.__dict__.items():
             if key not in _RESERVED and not key.startswith("_"):
-                payload[key] = (
-                    value  # agent_name, state_transition, execution_time_ms, token_usage…
-                )
+                payload[key] = value
+        if "token_usage" in payload:
+            tu = payload["token_usage"]
+            if not tu or tu == {}:
+                payload["token_usage"] = None
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
         return json.dumps(payload, default=str, ensure_ascii=False)

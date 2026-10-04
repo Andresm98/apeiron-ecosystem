@@ -3,4 +3,4 @@
 
 class FakeLLM:
     async def complete(self, system: str, user: str) -> str:
-        return f"[fake] {system[:24]}… respondiendo a: {user[:60]}"
+        return f"Thought: respondiendo en modo fake\nFinal Answer: [fake] {system[:24]}… respondiendo a: {user[:60]}"

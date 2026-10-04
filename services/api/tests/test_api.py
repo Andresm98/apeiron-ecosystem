@@ -11,7 +11,9 @@ from apeiron_api.settings import Settings
 @pytest.fixture
 def client():
     settings = Settings(
-        llm_provider="fake", jwt_secret="test-secret-test-secret-test-secret-0000"
+        llm_provider="fake",
+        vector_backend="memory",
+        jwt_secret="test-secret-test-secret-test-secret-0000",
     )
     with TestClient(create_app(settings)) as c:
         yield c

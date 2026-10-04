@@ -1,4 +1,6 @@
 # Desarrollo: docker compose -f deploy/docker-compose.yml up --build
+# docker compose -f deploy/docker-compose.yml --profile web up --build
+
 # Producción: --profile web, imágenes ECR inyectadas por deploy-ec2.yml.
 services:
   api:

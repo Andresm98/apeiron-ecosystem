@@ -1,6 +1,6 @@
 # ADR-004: Tools, MCP y memoria de conocimiento
 
-**Estado:** PENDIENTE  
+**Estado:** COMPLETADO  
 **Fecha:** 2026-10-03
 
 ## Contexto
@@ -35,6 +35,4 @@ El catálogo es auditable y cada agente recibe solo la mínima capacidad necesar
 
 ## Estado actual y brechas
 
-Contrastado con el código: puertos `ToolPort`/`VectorStorePort`; tools `formal_logic_calculator` (parser sin `eval`, 8 variables), `mcp_public_api_tool` (arXiv allowlisted + MCP opcional) y `vector_memory_retriever`. Chroma filtra `user_id`+global; in-memory es léxico. Hay un test de aislamiento entre usuarios sobre el store in-memory.
-
-Sigue pendiente respecto a la decisión: recuperación híbrida semántica+léxica con rerank, retención/límites de tamaño, borrado operativo de memoria, y pruebas de aislamiento sobre Chroma.
+Todas las capacidades decididas están implementadas y verificadas: puertos `ToolPort`/`VectorStorePort`; tools `formal_logic_calculator`, `mcp_public_api_tool` (arXiv allowlisted + MCP opcional) y `vector_memory_retriever`. Se implementa recuperación híbrida semántica+léxica con rerank (`hybrid_rerank`), retención y límites de tamaño por usuario (`max_docs_per_user`), borrado operativo de memoria (`DELETE /v1/memory`) y pruebas automatizadas de aislamiento, retención y borrado tanto en el store in-memory como sobre `ChromaVectorStore`.

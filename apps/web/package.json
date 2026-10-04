@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
+    "node": "^22.22.3 || ^24.0.0 || >=26.0.0"
   },
   "scripts": {
     "start": "ng serve",
-    "build": "ng build"
+    "build": "ng build",
+    "test": "node --experimental-strip-types --test src/app/core/*.spec.ts"
   },
   "dependencies": {
     "@angular/common": "^22.2.1",

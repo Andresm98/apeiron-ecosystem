@@ -4,15 +4,7 @@ import { API_BASE_URL } from './api.config';
 import { AuthService } from './auth.service';
 import { ChatEvent, ChatRequest } from './models';
 
-function parseFrame(frame: string): ChatEvent | null {
-  let type = 'message';
-  const data: string[] = [];
-  for (const line of frame.split('\n')) {
-    if (line.startsWith('event: ')) type = line.slice(7);
-    else if (line.startsWith('data: ')) data.push(line.slice(6));
-  }
-  return data.length ? ({ type, data: JSON.parse(data.join('\n')) } as ChatEvent) : null;
-}
+import { parseFrame } from './parser';
 
 @Injectable({ providedIn: 'root' })
 export class ChatStreamService {

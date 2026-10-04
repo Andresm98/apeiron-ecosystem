@@ -1,6 +1,6 @@
 # ADR-005: Autenticación, autorización y resiliencia
 
-**Estado:** PENDIENTE  
+**Estado:** COMPLETADO  
 **Fecha:** 2026-10-03
 
 ## Contexto
@@ -29,6 +29,4 @@ El diseño reduce abuso y limita fallos en cascada, pero JWT por sí mismo no pr
 
 ## Estado actual y brechas
 
-Contrastado con el código: OAuth2 password + JWT (sub/exp, TTL 60 min), bcrypt, CORS configurado, token web solo en memoria, secret de desarrollo rechazado si `APEIRON_ENV=prod`, timeouts de nodo/LLM/tool, Tenacity y circuit breaker por dependencia. Fallback LLM si hay modelo alternativo. Errores de stream no filtran stack traces.
-
-Sigue pendiente respecto a la decisión: repositorio persistente de usuarios, límites de tasa en auth/chat, desactivar o proteger el registro público, rotación de clave JWT, jitter en reintentos y serialización de una sola prueba half-open concurrente.
+Todas las capacidades decididas están implementadas y verificadas: OAuth2 password + JWT (sub/exp, TTL 60 min, rotación con `previous_secret`), bcrypt, CORS configurado, token web solo en memoria, secret de desarrollo rechazado en `prod`, repositorio persistente SQLite (`SqliteUserRepository`), rate limiting deslizante en auth/chat (`enforce_auth_rate`/`enforce_chat_rate`), configuración para deshabilitar o restringir el registro público (`public_register`), retries con backoff exponencial y jitter (`wait_exponential_jitter`), circuit breaker por dependencia con prueba única concurrente en `half-open` (`asyncio.Lock`), fallback LLM y ocultación de errores internos.

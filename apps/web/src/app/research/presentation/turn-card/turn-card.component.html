@@ -1,0 +1,34 @@
+<div class="heading">
+  <span class="name">{{ agentLabel(turn().agent) }}</span>
+  <span class="meta">
+    RONDA {{ turn().round + 1 }} · {{ turn().responds_to ? 'RESPONDE A ' + agentLabel(turn().responds_to!).toUpperCase() : 'ABRE EL DEBATE' }}
+  </span>
+</div>
+
+@if (replied(); as other) {
+  <blockquote class="replies-to">
+    <span class="label">En respuesta a {{ agentLabel(other.agent) }} · ronda {{ other.round + 1 }}</span>
+    «{{ excerpt(other.text) }}»
+  </blockquote>
+}
+
+<p class="text">{{ turn().text }}</p>
+
+@if (evidence().length) {
+  <details class="evidence" open>
+    <summary>Razonamiento observable · {{ evidence().length }} {{ evidence().length === 1 ? 'herramienta' : 'herramientas' }}</summary>
+    <ol>
+      @for (s of evidence(); track s.step) {
+        <li [class.failed]="s.error">
+          <span class="call">
+            Paso {{ s.step }} · <code>{{ s.tool }}</code>({{ excerpt(s.input, 90) }})
+            @if (s.auto) { <em class="auto">consulta automática: el agente no buscó evidencia</em> }
+          </span>
+          <span class="obs">{{ excerpt(s.observation, 260) }}</span>
+        </li>
+      }
+    </ol>
+  </details>
+} @else {
+  <p class="no-tools">Sin herramientas: respondió solo con su razonamiento.</p>
+}

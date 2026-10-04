@@ -53,7 +53,7 @@ APEIRON_LANGSMITH_API_KEY=lsv2_...
    APEIRON_SUPABASE_URL=https://<project-ref>.supabase.co
    APEIRON_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
    ```
-3. En *SQL Editor*, ejecuta [`deploy/supabase/migrations/0001_agent_runs.sql`](deploy/supabase/migrations/0001_agent_runs.sql). Crea la tabla `agent_runs` con RLS.
+3. Aplica el esquema con **migraciones** de la Supabase CLI (nunca SQL a mano): `npx supabase link --project-ref <ref>` y `npx supabase db push`. Crea `agent_runs`, `agents`, `agent_executions` y la RPC `record_agent_run`, todo con RLS. Detalle en [supabase/README.md](supabase/README.md).
 4. En *Authentication → URL Configuration*, pon `http://localhost` como **Site URL**. Para entrar sin confirmar el correo durante el desarrollo, desactiva *Confirm email* en *Authentication → Sign In / Providers → Email*.
 
 Con `APEIRON_AUTH_PROVIDER=local` la app funciona sin Supabase (SQLite y JWT en memoria), pero sin sesión persistente ni historial. Si eliges `supabase` y dejas vacías la URL o la clave, la API no arranca y te dice qué falta.
@@ -81,11 +81,12 @@ Abre **http://localhost**:
 2. Elige un caso de estudio o escribe una pregunta, y el modo:
    - **Consulta**: Ápeiron elige un worker según la intención (por defecto Anaximandro; Heráclito si mencionas *devenir* o *logos*).
    - **Debate**: Anaximandro y Heráclito hablan por turnos (1 o 2 rondas) y Ápeiron cierra con una síntesis.
-3. **Simulación · 0 tokens** viene activada. Recorre el grafo completo (router, workers, herramienta de memoria, síntesis) con un LLM determinista. Desactívala para usar el modelo real.
+3. **Simulación · 0 tokens** viene activada. Recorre el grafo completo con un LLM determinista que **no razona**: compone sus respuestas con la evidencia real recuperada de la memoria y la posición del interlocutor (marcadas `[simulación]`). Sirve para validar la mecánica sin coste. **Desactívala para ver razonamiento real** del modelo.
+   - Cada turno muestra a quién responde (con la cita), su texto y el **razonamiento observable**: herramienta, consulta y observación. Las consultas forzadas por la política de evidencia aparecen como *consulta automática*.
 4. El panel **Grafo en vivo** ilumina cada nodo mientras se ejecuta y muestra las llamadas LLM, los tokens y el tiempo de la ejecución.
 5. Con Supabase, la pestaña **Historial** del panel izquierdo lista tus ejecuciones guardadas. Haz clic en una para reabrir sus turnos, la síntesis, la traza y el consumo.
 
-Coste de referencia con `gpt-5.6-luna` y `reasoning_effort=low`: una consulta simple ≈ 360 tokens (1 llamada); un debate de 1 ronda ≈ 2.300 tokens (3 llamadas).
+Coste de referencia con `gpt-5.6-luna` y `reasoning_effort=low`: una consulta simple ≈ 360 tokens (1 llamada); un debate de 1 ronda ≈ 2.300 tokens (3 llamadas) sin evidencia obligatoria y ≈ 6.500 tokens (6–7 llamadas) con `APEIRON_REQUIRE_EVIDENCE=true`.
 
 ### 4. Ver el grafo en LangGraph Studio
 
@@ -257,7 +258,8 @@ Eventos SSE de `/v1/chat/stream`:
 |---|---|---|
 | `node` | `{node: "anaximandro/act", status: "start"\|"end", error}` | Iluminar el grafo; los nodos internos llevan ruta |
 | `trace` | `{messages: ["[Ápeiron Delegating → heraclito r0]", ...]}` | Traza legible de transiciones y herramientas |
-| `turn` | `{agent, round, text, degraded}` | Intervención de un worker |
+| `step` | `{agent, round, step, tool, input, observation, error, auto}` | Evidencia de cada paso ReAct con herramienta (el `Thought` no se expone) |
+| `turn` | `{agent, round, text, degraded, responds_to}` | Intervención de un worker y a quién responde |
 | `answer` | `{answer, mode, simulate, usage: {calls, input_tokens, output_tokens, total_tokens}}` | Cierre de la ejecución |
 | `error` | `{message: "internal_error", trace_id}` | Fallo no recuperable; no expone detalles internos |
 
@@ -299,7 +301,9 @@ Comunes a ambos modos:
 | Dato | Almacén | Volumen | Detalle |
 |---|---|---|---|
 | Usuarios y sesiones | **Supabase Auth** | Gestionado por Supabase | Modo `supabase`. La sesión del navegador la persiste supabase-js. |
-| Ejecuciones de agentes | **Supabase Postgres**, `public.agent_runs` | Gestionado por Supabase | Pregunta, modo, simulación, turnos, traza, síntesis, uso, modelo, duración, `trace_id` y estado (`completed`/`error`). RLS por `auth.uid()`; inmutables (sin UPDATE). Las simulaciones también se guardan, marcadas como tales. |
+| Ejecuciones de agentes | **Supabase Postgres**, `public.agent_runs` | Gestionado por Supabase | Pregunta, modo, simulación, turnos, traza, **evidencia (`steps`)**, síntesis, uso, modelo, duración, `trace_id` y estado (`completed`/`error`). RLS por `auth.uid()`; inmutables (sin UPDATE). Las simulaciones también se guardan, marcadas como tales. |
+| Identidad de agentes | `public.agents` | Gestionado por Supabase | Catálogo `apeiron` (orquestador), `anaximandro` y `heraclito` (workers): rol y herramientas. Solo cambia por migración. |
+| Agentes ejecutados | `public.agent_executions` | Gestionado por Supabase | Una fila por agente y ejecución: invocaciones, pasos de razonamiento, llamadas a herramientas, herramientas usadas, degradación y duración. Se escribe junto con la ejecución en una transacción (RPC `record_agent_run`). |
 | Usuarios (modo local) | SQLite (`SqliteUserRepository`) | `api-data` → `/app/data/users.db` | Solo con `APEIRON_AUTH_PROVIDER=local`. Sin `APEIRON_USERS_DB_PATH` se usa un repositorio en memoria. |
 | Memoria de usuario | ChromaDB, colección `apeiron_memory` | `chroma-data` → `/data` | Tras cada ejecución real se guarda `Q: … / A: …` con `user_id`. **La simulación no escribe memoria.** |
 | Conocimiento global | ChromaDB (`user_id=global`) | `chroma-data` | Fragmentos presocráticos y de física sembrados al arrancar. Usa *upsert* idempotente, así que no se duplican. |
@@ -414,7 +418,7 @@ Todas las variables usan el prefijo `APEIRON_` (salvo las claves de proveedor). 
 | Auth (modo local) | `JWT_SECRET`, `JWT_SECRET_PREVIOUS`, `JWT_TTL_MINUTES`, `PUBLIC_REGISTER`, `USERS_DB_PATH`, `AUTH_RATE_LIMIT_PER_MIN`, `CHAT_RATE_LIMIT_PER_MIN` |
 | LLM | `LLM_PROVIDER` (`fake`/`openai`/`anthropic`), `LLM_MODEL`, `LLM_FALLBACK_MODEL`, `LLM_MAX_TOKENS`, `LLM_REASONING_EFFORT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` |
 | Resiliencia | `LLM_TIMEOUT_S`, `LLM_RETRIES`, `BREAKER_FAILURES`, `BREAKER_RECOVERY_S`, `NODE_TIMEOUT_S`, `TOOL_TIMEOUT_S` |
-| Agentes | `DEFAULT_ROUNDS`, `MAX_REACT_STEPS`, `DEBATE_PARTICIPANTS`, `SIMULATION_PACE_S` |
+| Agentes | `DEFAULT_ROUNDS`, `MAX_REACT_STEPS`, `REQUIRE_EVIDENCE` (cada worker consulta al menos una herramienta; ≈ +1 llamada por worker), `DEBATE_PARTICIPANTS`, `SIMULATION_PACE_S` |
 | Memoria | `VECTOR_BACKEND` (`chroma`/`memory`), `CHROMA_HOST`, `CHROMA_PORT`, `MEMORY_MAX_DOCS_PER_USER`, `MEMORY_SEMANTIC_WEIGHT`, `MEMORY_LEXICAL_WEIGHT` |
 | Integraciones | `MCP_SERVER_URL` |
 | Observabilidad | `LANGSMITH_ENABLED`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT` |
@@ -434,8 +438,8 @@ Todas las variables usan el prefijo `APEIRON_` (salvo las claves de proveedor). 
 ```sh
 make install   # dependencias editables + herramientas
 make check     # Ruff, mypy estricto e import-linter (4 contratos)
-make test      # pytest: 60 tests
-cd apps/web && npm test                                   # node:test: 17 tests (incluye reglas de capas)
+make test      # pytest: 70 tests
+cd apps/web && npm test                                   # node:test: 20 tests (incluye reglas de capas)
 cd apps/web && npm run build -- --configuration production
 ```
 
@@ -453,9 +457,9 @@ Qué cubren los tests:
   - `npm ci` y build de Angular.
   - Solo en `main`: publica las imágenes `apeiron-api` y `apeiron-web` en GHCR con un tag inmutable `SHA-run-attempt`.
 - **CD** ([`deploy-ec2.yml`](.github/workflows/deploy-ec2.yml)), tras un CI exitoso en `main`:
-  - Se conecta por SSH a `EC2_HOST`.
+  - El `.env` de producción **vive en la VM y se edita allí**: el primer despliegue lo crea desde `.env.example`, y después CD nunca lo sobrescribe. Antes de reiniciar servicios lo valida con la clase `Settings` de la imagen nueva; si es inválido, aborta sin tocar los contenedores en marcha ([DEPLOY.md](docs/DEPLOY.md#variables-de-entorno-env)).
   - Copia el Compose y [`deploy-ec2.sh`](deploy/scripts/deploy-ec2.sh), descarga las imágenes de ese tag, levanta el perfil `web` y verifica `/healthz`.
-  - Usa un único secret: `AWS_SSH_PRIVATE_KEY`.
+  - Configuración en GitHub: solo `AWS_SSH_PRIVATE_KEY` (secret) y `EC2_HOST` (variable).
 - **Imágenes:**
   - API: multistage con Python 3.14 slim, usuario no-root, `WORKDIR /app` y healthcheck.
   - Web: Node 24 para el build y Nginx 1.27 para servir.
@@ -502,7 +506,7 @@ deploy/
   docker-compose.yml       # api, chroma, web (perfil web), studio (perfil studio)
   nginx/                   # proxy /api con SSE sin buffering
   scripts/                 # deploy-ec2.sh, smoke_e2e.py
-  supabase/migrations/     # SQL de agent_runs con RLS
+supabase/                  # config.toml + migrations/ (Supabase CLI): agent_runs, agents, agent_executions, RPC
 langgraph.json             # configuración de LangGraph Studio
 docs/adr/, docs/DEPLOY.md
 ```

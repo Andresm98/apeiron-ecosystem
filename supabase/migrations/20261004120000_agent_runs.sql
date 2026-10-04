@@ -1,6 +1,5 @@
 -- Ápeiron: ejecuciones de agentes por usuario (ADR-010).
--- Ejecutar una vez en Supabase: SQL Editor -> New query -> pegar -> Run
--- (o `supabase db push` si usas la CLI). Es idempotente.
+-- Se aplica con la CLI: `supabase db push` (ver supabase/README.md). Es idempotente.
 
 create table if not exists public.agent_runs (
   id          uuid primary key default gen_random_uuid(),

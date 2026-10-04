@@ -162,10 +162,28 @@ async def test_react_unknown_tool_does_not_crash():
 
 
 async def test_react_never_returns_unmarked_reasoning_as_answer():
-    llm = ScriptedLLM(["Thought: razonamiento privado"])
+    llm = ScriptedLLM(["Thought: razonamiento privado"] * 4)  # insiste en todos los pasos
     answer = await ReActAgent("a", "p", llm, [EchoTool()]).respond("q", [])
     assert "razonamiento privado" not in answer
     assert "respuesta final válida" in answer
+    assert "no entendí tu salida" in llm.prompts[1]  # se le recordó el formato antes de rendirse
+
+
+async def test_react_recovers_from_a_malformed_output():
+    llm = ScriptedLLM(["Pienso que sí, sin formato", "Final Answer: ahora sí"])
+    assert await ReActAgent("a", "p", llm, [EchoTool()]).respond("q", []) == "ahora sí"
+
+
+async def test_failed_worker_is_degraded_and_not_answered_to():
+    llm = ScriptedLLM(["sin formato"] * 2 + ["Final Answer: réplica", "síntesis"])
+    agents = {
+        "first": ReActAgent("first", "p", llm, [EchoTool()], max_steps=2),
+        "second": ReActAgent("second", "p", llm, [EchoTool()], max_steps=2),
+    }
+    out = await build_graph(agents, llm).ainvoke({"question": "Debate: x", "mode": "debate", "max_rounds": 1})
+    first, second = out["turns"]
+    assert first["degraded"] is True
+    assert second["responds_to"] is None  # no se responde a un turno fallido
 
 
 async def test_facade_stream_emits_trace_turn_answer():

@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     default_rounds: int = Field(default=2, ge=1, le=4)
     max_react_steps: int = Field(default=4, ge=1, le=8)
     tool_timeout_s: float = Field(default=20.0, gt=0, le=120)
+    # Obliga a cada worker a usar al menos una tool antes de responder (+1 llamada LLM aprox.).
+    require_evidence: bool = False
     debate_participants: list[str] = Field(
         default_factory=lambda: ["anaximandro", "heraclito"], min_length=1, max_length=4
     )

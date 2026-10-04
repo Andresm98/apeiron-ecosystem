@@ -1,4 +1,4 @@
-import type { ChatEvent, Turn, Usage } from '../domain/chat.ts';
+import type { AgentStep, ChatEvent, Turn, Usage } from '../domain/chat.ts';
 import { type GraphRun, applyNodeEvent, emptyRun } from '../domain/graph-run.ts';
 import type { RunRecord } from '../domain/run-record.ts';
 
@@ -9,6 +9,7 @@ export interface RunState {
   status: RunStatus;
   trace: string[];
   turns: Turn[];
+  steps: AgentStep[];
   answer: string;
   error: string | null;
   graph: GraphRun;
@@ -16,7 +17,9 @@ export interface RunState {
 }
 
 export function idleRun(): RunState {
-  return { status: 'idle', trace: [], turns: [], answer: '', error: null, graph: emptyRun(), usage: null };
+  return {
+    status: 'idle', trace: [], turns: [], steps: [], answer: '', error: null, graph: emptyRun(), usage: null,
+  };
 }
 
 export function startRun(): RunState {
@@ -31,6 +34,8 @@ export function reduceRunEvent(state: RunState, ev: ChatEvent): RunState {
       return { ...state, turns: [...state.turns, ev.data] };
     case 'node':
       return { ...state, graph: applyNodeEvent(state.graph, ev.data) };
+    case 'step':
+      return { ...state, steps: [...state.steps, ev.data] };
     case 'answer':
       return { ...state, status: 'done', answer: ev.data.answer, usage: ev.data.usage ?? null };
     case 'error':
@@ -60,6 +65,7 @@ export function fromRecord(record: RunRecord): RunState {
     status: record.status === 'error' ? 'error' : 'done',
     trace: record.trace,
     turns: record.turns,
+    steps: record.steps ?? [],
     answer: record.answer,
     usage,
     error: record.status === 'error' ? `La ejecución falló (${record.error ?? 'error'}; trace ${record.trace_id}).` : null,

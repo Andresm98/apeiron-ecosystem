@@ -11,16 +11,33 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from apeiron_core.application.agents.base import dialogue_block, stream_emitter
+from apeiron_core.application.agents.base import dialogue_block, emit_step, stream_emitter
 from apeiron_core.application.ports.outbound.events import Emit
 from apeiron_core.application.ports.outbound.llm import LLMPort
 from apeiron_core.application.ports.outbound.tools import ToolPort
 from apeiron_core.domain.entities.agent_turn import AgentTurn
 
-ACTION_RE = re.compile(
-    r"Action:\s*(?P<tool>[\w\-]+)\s*\n\s*Action Input:\s*(?P<input>[^\n]+)"
+PREVIEW_INPUT, PREVIEW_OBSERVATION = 200, 480
+EVIDENCE_RULE = (
+    "Antes de 'Final Answer:' usa al menos una herramienta para apoyar tu posición "
+    "con evidencia verificable. Cita solo observaciones reales; nunca inventes consultas."
 )
-FINAL_RE = re.compile(r"Final Answer:\s*(?P<answer>.+)", re.S)
+EVIDENCE_RETRY = (
+    "\nSistema: aún no has consultado ninguna herramienta. Responde SOLO con:\n"
+    "Thought: <qué evidencia buscas>\nAction: <herramienta>\nAction Input: <consulta>\n"
+)
+FALLBACK_TOOLS = ("vector_memory_retriever", "mcp_public_api_tool")
+# Tolerante a desvíos habituales de los LLM: **negritas**, `backticks` y la entrada de
+# la acción en la línea siguiente a "Action Input:".
+ACTION_RE = re.compile(
+    r"\**Action\**:\**\s*[`*]*(?P<tool>[\w\-]+)[`*]*\s*\n+\s*"
+    r"\**Action Input\**:\**[ \t]*\n?[ \t]*(?P<input>[^\n]+)"
+)
+FINAL_RE = re.compile(r"\**Final Answer\**:\**\s*(?P<answer>.+)", re.S)
+FORMAT_RETRY = (
+    "\nSistema: no entendí tu salida. Usa exactamente 'Action:' + 'Action Input:' "
+    "o 'Final Answer:'.\n"
+)
 
 FORMAT = """Usa EXACTAMENTE este formato.
 Para usar una herramienta:
@@ -37,11 +54,15 @@ Final Answer: <respuesta>"""
 class WorkerState(TypedDict, total=False):
     question: str
     history: list[AgentTurn]
+    round: int
     scratch: str
     step: int
     action_tool: str
     action_input: str
     answer: str
+    retry: bool
+    auto: bool
+    failed: bool  # sin respuesta final válida: el turno se publica como degradado
 
 
 class ReActAgent:
@@ -55,6 +76,7 @@ class ReActAgent:
         tools: Sequence[ToolPort] = (),
         max_steps: int = 4,
         tool_timeout_s: float = 20.0,
+        require_evidence: bool = False,
     ) -> None:
         if not 1 <= max_steps <= 8:
             raise ValueError("max_steps debe estar entre 1 y 8")
@@ -66,6 +88,8 @@ class ReActAgent:
         self._tools = {tool.name: tool for tool in tools}
         self._max_steps = max_steps
         self._tool_timeout_s = tool_timeout_s
+        # Exigir evidencia necesita al menos un paso de tool y otro de respuesta.
+        self._require_evidence = require_evidence and bool(tools) and max_steps >= 2
         self.graph: Any = self._build_graph()
 
     def _build_graph(self) -> Any:
@@ -74,15 +98,17 @@ class ReActAgent:
         graph.add_edge(START, "reason")
         if self._tools:
             graph.add_node("act", self._act)
-            graph.add_conditional_edges(
-                "reason",
-                lambda state: "act" if state.get("action_tool") else END,
-                ["act", END],
-            )
+            graph.add_conditional_edges("reason", self._next, ["act", "reason", END])
             graph.add_edge("act", "reason")
         else:
             graph.add_edge("reason", END)
         return graph.compile(name=self.name)
+
+    @staticmethod
+    def _next(state: WorkerState) -> str:
+        if state.get("action_tool"):
+            return "act"
+        return "reason" if state.get("retry") and not state.get("answer") else END
 
     def _system(self) -> str:
         if not self._tools:
@@ -90,7 +116,8 @@ class ReActAgent:
         catalog = "\n".join(
             f"- {tool.name}: {tool.description}" for tool in self._tools.values()
         )
-        return f"{self._persona}\n\nHerramientas disponibles:\n{catalog}\n\n{FORMAT}"
+        rule = f"\n{EVIDENCE_RULE}" if self._require_evidence else ""
+        return f"{self._persona}\n\nHerramientas disponibles:\n{catalog}\n\n{FORMAT}{rule}"
 
     async def _run_tool(self, tool_name: str, tool_input: str) -> str:
         tool = self._tools.get(tool_name)
@@ -110,7 +137,7 @@ class ReActAgent:
         prompt = state["question"] + dialogue_block(self.name, state.get("history", []))
         if scratch:
             prompt += f"\n\n{scratch}"
-        force = step == self._max_steps - 1
+        force = step >= self._max_steps - 1  # cota dura: nunca más pasos que max_steps
         if self._tools and force:
             prompt += "\n\nDebes responder ahora con 'Final Answer:'."
         output = (await self._llm.complete(self._system(), prompt)).strip()
@@ -119,11 +146,22 @@ class ReActAgent:
             return {"answer": final.group("answer").strip() if final else output}
         action, final = ACTION_RE.search(output), FINAL_RE.search(output)
         if final and not (action and action.start() < final.start()):
+            if self._require_evidence and "Observation:" not in scratch:
+                if not state.get("retry") and not force:
+                    # 1º: se le pide (sin consumir paso) que use una herramienta.
+                    return {"scratch": scratch + EVIDENCE_RETRY, "action_tool": "", "retry": True}
+                # 2º: insiste en responder sin evidencia -> la consulta la hace el sistema,
+                # así ninguna respuesta llega sin una observación real detrás.
+                return self._fallback_action(state)
             return {"answer": final.group("answer").strip(), "action_tool": ""}
+        if action is None and not force:
+            # Salida fuera de formato: se le recuerda el formato (consume un paso, acotado).
+            return {"scratch": scratch + FORMAT_RETRY, "step": step + 1, "action_tool": "", "retry": True}
         if action is None or force:
             return {
                 "answer": f"[{self.name}: no se obtuvo una respuesta final válida]",
                 "action_tool": "",
+                "failed": True,
             }
         return {
             "action_tool": action.group("tool"),
@@ -131,16 +169,41 @@ class ReActAgent:
             "scratch": scratch + output[: action.end()],
         }
 
+    def _fallback_action(self, state: WorkerState) -> dict[str, Any]:
+        tool = next((t for t in FALLBACK_TOOLS if t in self._tools), next(iter(self._tools)))
+        return {
+            "action_tool": tool,
+            "action_input": state["question"][:PREVIEW_INPUT],
+            "auto": True,
+            "step": max(state.get("step", 0), self._max_steps - 2),  # tras act, toca responder
+        }
+
     async def _act(self, state: WorkerState) -> dict[str, Any]:
         notify = stream_emitter()
         tool_name = state["action_tool"]
+        tool_input = state.get("action_input", "")
+        step = state.get("step", 0)
         notify(f"[{self.name} Executing Tool: {tool_name}]")
-        observation = await self._run_tool(tool_name, state.get("action_input", ""))
-        notify(f"[{self.name} Reflecting]")
+        observation = await self._run_tool(tool_name, tool_input)
+        emit_step(
+            f"[{self.name} Reflecting]",
+            {
+                "agent": self.name,
+                "round": state.get("round", 0),
+                "step": step + 1,
+                "tool": tool_name,
+                "input": tool_input[:PREVIEW_INPUT],
+                "observation": observation[:PREVIEW_OBSERVATION],
+                "error": observation.startswith("Error"),
+                "auto": bool(state.get("auto")),  # consulta forzada por la política de evidencia
+            },
+        )
         return {
             "scratch": f"{state.get('scratch', '')}\nObservation: {observation}\n",
-            "step": state.get("step", 0) + 1,
+            "step": step + 1,
             "action_tool": "",
+            "retry": False,
+            "auto": False,
         }
 
     async def respond(

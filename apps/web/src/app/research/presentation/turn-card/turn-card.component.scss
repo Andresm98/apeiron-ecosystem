@@ -1,0 +1,140 @@
+:host {
+  display: block;
+  align-self: flex-start;
+  max-width: 88%;
+  padding: 12px 14px;
+  border-left: 2px solid var(--line);
+  background: #f5f6f2;
+}
+
+:host(.reply) {
+  align-self: flex-end;
+  border-left: 0;
+  border-right: 2px solid var(--moss-dark);
+}
+
+:host(.degraded) {
+  border-color: var(--rust);
+  opacity: 0.75;
+}
+
+.heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.name {
+  color: var(--forest);
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+
+.meta {
+  align-self: center;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.replies-to {
+  margin: 0 0 10px;
+  padding: 7px 10px;
+  border-left: 3px solid var(--moss);
+  color: #4c5b53;
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.5;
+  background: #eef2ea;
+}
+
+.label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.evidence {
+  margin-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.evidence summary {
+  padding: 8px 0 4px;
+  color: var(--forest);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.evidence ol {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.evidence li {
+  display: grid;
+  gap: 3px;
+  padding: 7px 9px;
+  border: 1px solid var(--line-soft);
+  background: #fff;
+}
+
+.evidence li.failed {
+  border-color: #e8b9ab;
+}
+
+.call {
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.call code {
+  color: var(--rust);
+  font-weight: 700;
+}
+
+.auto {
+  margin-left: 6px;
+  color: var(--rust);
+  font-size: 9px;
+}
+
+.obs {
+  color: #4c5b53;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.no-tools {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+@media (max-width: 720px) {
+  :host {
+    max-width: 100%;
+  }
+}

@@ -32,6 +32,7 @@ class AgentFactory(Protocol):
         tools: Mapping[str, ToolPort],
         max_steps: int = 4,
         tool_timeout_s: float = 20.0,
+        require_evidence: bool = False,
     ) -> SpecialistAgent: ...
 
 
@@ -43,9 +44,10 @@ def _build(
     tools: Mapping[str, ToolPort],
     max_steps: int,
     tool_timeout_s: float,
+    require_evidence: bool = False,
 ) -> SpecialistAgent:
     selected = [tools[tool_name] for tool_name in wanted if tool_name in tools]
-    return ReActAgent(name, persona, llm, selected, max_steps, tool_timeout_s)
+    return ReActAgent(name, persona, llm, selected, max_steps, tool_timeout_s, require_evidence)
 
 
 class AnaximandroFactory:
@@ -63,6 +65,7 @@ class AnaximandroFactory:
         tools: Mapping[str, ToolPort],
         max_steps: int = 4,
         tool_timeout_s: float = 20.0,
+        require_evidence: bool = False,
     ) -> SpecialistAgent:
         return _build(
             self.name,
@@ -72,6 +75,7 @@ class AnaximandroFactory:
             tools,
             max_steps,
             tool_timeout_s,
+            require_evidence,
         )
 
 
@@ -86,6 +90,7 @@ class HeraclitoFactory:
         tools: Mapping[str, ToolPort],
         max_steps: int = 4,
         tool_timeout_s: float = 20.0,
+        require_evidence: bool = False,
     ) -> SpecialistAgent:
         return _build(
             self.name,
@@ -95,4 +100,5 @@ class HeraclitoFactory:
             tools,
             max_steps,
             tool_timeout_s,
+            require_evidence,
         )

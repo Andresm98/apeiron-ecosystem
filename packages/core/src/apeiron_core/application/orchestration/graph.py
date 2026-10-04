@@ -72,9 +72,14 @@ def _worker_node(name: str, agent: SpecialistAgent, node_timeout_s: float) -> An
             async with asyncio.timeout(node_timeout_s):
                 if subgraph is not None:
                     out = await subgraph.ainvoke(
-                        {"question": state["question"], "history": history}
+                        {
+                            "question": state["question"],
+                            "history": history,
+                            "round": state["round"],
+                        }
                     )
                     text = str(out.get("answer", ""))
+                    degraded = bool(out.get("failed"))
                 else:
                     text = await agent.respond(
                         state["question"], history, stream_emitter()
@@ -94,11 +99,16 @@ def _worker_node(name: str, agent: SpecialistAgent, node_timeout_s: float) -> An
                 "execution_time_ms": round((time.perf_counter() - started) * 1000, 1),
             },
         )
+        interlocutor = next(
+            (t["agent"] for t in reversed(history) if t["agent"] != name and not t["degraded"]),
+            None,
+        )
         turn: AgentTurn = {
             "agent": name,
             "round": state["round"],
             "text": text,
             "degraded": degraded,
+            "responds_to": interlocutor,
         }
         return {"turns": [turn], "trace": [f"[{name} Thinking r{state['round']}]"]}
 

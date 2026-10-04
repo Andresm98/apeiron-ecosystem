@@ -5,6 +5,18 @@ from typing import Any, Literal, TypedDict
 RunStatus = Literal["completed", "error"]
 
 
+class AgentExecution(TypedDict):
+    """Qué hizo un agente (orquestador o worker) dentro de una ejecución."""
+
+    agent_id: str
+    invocations: int
+    reasoning_steps: int
+    tool_calls: int
+    tools_used: list[str]
+    degraded: bool
+    duration_ms: int
+
+
 class AgentRun(TypedDict):
     user_id: str
     trace_id: str
@@ -15,6 +27,8 @@ class AgentRun(TypedDict):
     answer: str
     turns: list[dict[str, Any]]
     trace: list[str]
+    steps: list[dict[str, Any]]  # evidencia ReAct pública (tool, entrada, observación)
+    agents: list[AgentExecution]
     usage: dict[str, int]
     model: str
     duration_ms: int

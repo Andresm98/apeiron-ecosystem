@@ -138,7 +138,9 @@ def build_apeiron_graph(
 ) -> Any:
     """Grafo orquestador Ápeiron; `simulate` usa el LLM determinista (0 tokens)."""
     llm = _build_llm(s, simulate)
-    workers = _registry().build_all(llm, tools, s.max_react_steps, s.tool_timeout_s)
+    workers = _registry().build_all(
+        llm, tools, s.max_react_steps, s.tool_timeout_s, s.require_evidence
+    )
     return build_graph(
         workers,
         llm,

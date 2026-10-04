@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ChatRequest } from '../domain/chat';
-import { RunSummary } from '../domain/run-record';
+import { AgentExecution, RunSummary } from '../domain/run-record';
 import { Topology } from '../domain/topology';
 import { ChatStreamPort } from './ports/chat-stream.port';
 import { RunHistoryRepository } from './ports/run-history.repository';
@@ -21,6 +21,7 @@ export class ResearchStore {
   readonly status = computed(() => this.run$().status);
   readonly trace = computed(() => this.run$().trace);
   readonly turns = computed(() => this.run$().turns);
+  readonly steps = computed(() => this.run$().steps);
   readonly answer = computed(() => this.run$().answer);
   readonly error = computed(() => this.run$().error);
   readonly graph = computed(() => this.run$().graph);
@@ -32,6 +33,8 @@ export class ResearchStore {
   readonly history = signal<RunSummary[]>([]);
   readonly historyError = signal('');
   readonly openedRunId = signal<string | null>(null);
+  /** Agentes ejecutados de la ejecución reabierta (registro persistido en Supabase). */
+  readonly openedAgents = signal<AgentExecution[]>([]);
   private historyEnabled = false;
 
   /** Historial persistido (Supabase). Se refresca solo al terminar cada ejecución. */
@@ -53,6 +56,7 @@ export class ResearchStore {
       this.run$.set(fromRecord(record));
       this.simulated.set(record.simulate);
       this.elapsedMs.set(record.duration_ms);
+      this.openedAgents.set(record.agent_executions ?? []);
       this.openedRunId.set(id);
       return record.question;
     } catch {
@@ -73,6 +77,7 @@ export class ResearchStore {
   run(req: ChatRequest): void {
     this.sub?.unsubscribe();
     this.openedRunId.set(null);
+    this.openedAgents.set([]);
     this.run$.set(startRun());
     this.simulated.set(!!req.simulate);
     this.elapsedMs.set(0);

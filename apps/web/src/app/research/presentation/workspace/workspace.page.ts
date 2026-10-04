@@ -7,11 +7,13 @@ import { CASE_STUDIES, CaseStudy } from '../../domain/case-studies';
 import { Mode } from '../../domain/chat';
 import { RunSummary } from '../../domain/run-record';
 import { AgentGraphComponent } from '../agent-graph/agent-graph.component';
+import { TurnCardComponent } from '../turn-card/turn-card.component';
 import { agentLabel } from '../agent-label';
+import { excerpt, pendingSteps, repliedTurn, stepsOfTurn } from '../../domain/dialogue';
 
 @Component({
   selector: 'app-workspace-page',
-  imports: [FormsModule, AgentGraphComponent],
+  imports: [FormsModule, AgentGraphComponent, TurnCardComponent],
   templateUrl: './workspace.page.html',
   styleUrl: './workspace.page.scss',
 })
@@ -23,6 +25,10 @@ export class WorkspacePage implements OnInit {
   readonly selectedCaseId = signal(CASE_STUDIES[0]?.id ?? 1);
   readonly submittedQuestion = signal('');
   readonly agentLabel = agentLabel;
+  readonly excerpt = excerpt;
+  readonly stepsOfTurn = stepsOfTurn;
+  readonly repliedTo = (index: number) => repliedTurn(this.state.turns(), index);
+  readonly liveSteps = computed(() => pendingSteps(this.state.steps(), this.state.turns()));
   readonly leftTab = signal<'cases' | 'history'>('cases');
   readonly historyEnabled = computed(() => this.session.capabilities().runsEnabled);
 

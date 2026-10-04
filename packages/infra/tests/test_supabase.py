@@ -72,18 +72,21 @@ async def test_supabase_runs_repository_uses_user_token_for_rls():
 
     token = request_ctx.set(replace(request_ctx.get(), user_id=USER, access_token="user-jwt"))
     try:
-        await repo.save({"user_id": USER, "question": "q"})  # type: ignore[typeddict-item]
+        await repo.save(
+            {"user_id": USER, "question": "q", "agents": [{"agent_id": "apeiron"}]}  # type: ignore[typeddict-item]
+        )
         rows = await repo.list_recent(5)
         one = await repo.get("r1")
     finally:
         request_ctx.reset(token)
 
     insert, listing = seen[0], seen[1]
-    assert str(insert.url) == f"{URL}/rest/v1/agent_runs"
+    assert str(insert.url) == f"{URL}/rest/v1/rpc/record_agent_run"  # transacción única
     assert insert.headers["apikey"] == "sb_publishable_x"
     assert insert.headers["authorization"] == "Bearer user-jwt"
-    assert insert.headers["prefer"] == "return=minimal"
-    assert json.loads(insert.content)["user_id"] == USER
+    body = json.loads(insert.content)
+    assert body["p_agents"] == [{"agent_id": "apeiron"}]
+    assert "user_id" not in body["p_run"]  # la RPC usa auth.uid(), nunca el payload
     assert listing.url.params["user_id"] == f"eq.{USER}"
     assert listing.url.params["order"] == "created_at.desc"
     assert listing.url.params["limit"] == "5"
@@ -96,6 +99,6 @@ async def test_supabase_runs_repository_surfaces_http_errors():
     token = request_ctx.set(replace(request_ctx.get(), access_token="t"))
     try:
         with pytest.raises(RunPersistenceError, match="401"):
-            await repo.save({"question": "q"})  # type: ignore[typeddict-item]
+            await repo.save({"question": "q", "agents": []})  # type: ignore[typeddict-item]
     finally:
         request_ctx.reset(token)

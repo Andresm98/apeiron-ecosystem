@@ -1,6 +1,7 @@
 """mcp_public_api_tool: ciencia en tiempo real vía MCP (si hay servidor) o arXiv (httpx)."""
 
 import logging
+import re
 import xml.etree.ElementTree as ET
 from typing import Protocol
 
@@ -38,6 +39,22 @@ class McpSdkGateway:
                 )
 
 
+_STOPWORDS = {
+    "the", "and", "for", "with", "from", "into", "about", "recent", "review", "study",
+    "paper", "papers", "los", "las", "del", "una", "que", "por", "para", "con", "sobre",
+}
+
+
+def arxiv_query(text: str, max_terms: int = 4) -> str:
+    """`Fermi paradox technosignatures` -> `all:Fermi AND all:paradox AND all:technosignatures`.
+
+    arXiv solo aplica el prefijo de campo al primer término de `all:a b c`; sin AND el
+    resto se busca suelto y, ordenado por fecha, devuelve artículos sin relación.
+    """
+    terms = [t for t in re.findall(r"[\w-]{3,}", text) if t.lower() not in _STOPWORDS]
+    return " AND ".join(f"all:{t}" for t in terms[:max_terms])
+
+
 class ArxivClient:
     def __init__(
         self,
@@ -47,12 +64,23 @@ class ArxivClient:
         self._client, self._url = client, base_url
 
     async def search(self, query: str, max_results: int = 3) -> list[dict[str, str]]:
+        """Por relevancia; si los 4 términos no dan resultados, reintenta con los 2 primeros."""
+        for terms in (4, 2):
+            search_query = arxiv_query(query, terms)
+            if not search_query:
+                return []
+            items = await self._query(search_query, max_results)
+            if items:
+                return items
+        return []
+
+    async def _query(self, search_query: str, max_results: int) -> list[dict[str, str]]:
         resp = await self._client.get(
             self._url,
             params={
-                "search_query": f"all:{query}",
+                "search_query": search_query,
                 "max_results": max_results,
-                "sortBy": "submittedDate",
+                "sortBy": "relevance",
             },
         )
         resp.raise_for_status()

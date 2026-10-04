@@ -86,13 +86,23 @@ jobs:
           remote_check="sudo -n true || { echo 'ec2-user needs passwordless sudo' >&2; exit 20; }; \
             sudo -n sh -c \"command -v docker >/dev/null || { echo 'Docker is not installed' >&2; exit 21; }; \
             docker compose version || { echo 'Docker Compose plugin is unavailable' >&2; exit 22; }; \
-            test -r /opt/apeiron-ecosystem/.env || { echo 'Missing or unreadable /opt/apeiron-ecosystem/.env' >&2; exit 23; }\""
+            install -d -m 755 /opt/apeiron-ecosystem\""
           ssh -i "$SSH_KEY_FILE" \
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             -o BatchMode=yes \
             -o ConnectTimeout=15 \
             "${EC2_SSH_USER}@${EC2_HOST}" "$remote_check"
+
+      # .env.example viaja como template. En la VM solo se usa para crear .env si no existe:
+      # el .env de producción se edita en la VM y CD nunca lo sobrescribe.
+      - name: Upload .env.example template to EC2
+        env:
+          EC2_HOST: ${{ env.EC2_HOST }}
+          SSH_KEY_FILE: ${{ steps.ssh.outputs.key-file }}
+        run: |
+          set -euo pipefail
+          ssh -i "$SSH_KEY_FILE"             -o IdentitiesOnly=yes             -o StrictHostKeyChecking=yes             -o BatchMode=yes             -o ConnectTimeout=15             "${EC2_SSH_USER}@${EC2_HOST}"             "sudo -n sh -c 'umask 077 && cat > /opt/apeiron-ecosystem/.env.example'"             < .env.example
 
       - name: Deploy the pinned release
         env:

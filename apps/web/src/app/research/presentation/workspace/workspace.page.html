@@ -98,15 +98,19 @@
         }
 
         @for (turn of state.turns(); track $index) {
-          <article class="agent-turn" [class.agent-turn-reply]="$index % 2 === 1" [class.agent-turn-degraded]="turn.degraded">
-            <div class="turn-heading">
-              <span class="agent-name">{{ agentLabel(turn.agent) }}</span>
-              <span class="turn-round">
-                RONDA {{ turn.round + 1 }}{{ $index > 0 ? ' · RESPONDE A ' + agentLabel(state.turns()[$index - 1].agent).toUpperCase() : '' }}
-              </span>
-            </div>
-            <p>{{ turn.text }}</p>
-          </article>
+          <app-turn-card
+            [turn]="turn"
+            [replied]="repliedTo($index)"
+            [evidence]="stepsOfTurn(state.steps(), turn)"
+            [reply]="$index % 2 === 1"
+          />
+        }
+
+        @for (s of liveSteps(); track $index) {
+          <p class="working-state">
+            <span class="status-dot"></span>
+            <span><strong>{{ agentLabel(s.agent) }}</strong> consultó {{ s.tool }} → «{{ excerpt(s.observation, 140) }}»</span>
+          </p>
         }
 
         @if (state.status() === 'running') {
@@ -192,6 +196,15 @@
             Simulación: LLM determinista, recorrido completo sin coste.
           } @else {
             {{ usage.input_tokens }} entrada · {{ usage.output_tokens }} salida · {{ model() }}
+          }
+        </p>
+      }
+
+      @if (state.openedAgents().length) {
+        <p class="usage-note">
+          Agentes ejecutados (registro en Supabase):
+          @for (a of state.openedAgents(); track a.agent_id) {
+            <br />· {{ agentLabel(a.agent_id) }}: {{ a.invocations }}× · {{ a.reasoning_steps }} pasos · {{ a.tool_calls }} tools{{ a.tools_used.length ? ' (' + a.tools_used.join(', ') + ')' : '' }}{{ a.degraded ? ' · degradado' : '' }}
           }
         </p>
       }

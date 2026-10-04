@@ -1,5 +1,7 @@
 """Piezas compartidas por los workers: diálogo entre agentes y emisión de eventos."""
 
+from typing import Any
+
 from langgraph.config import get_stream_writer
 
 from apeiron_core.application.ports.outbound.events import Emit
@@ -33,3 +35,12 @@ def stream_emitter() -> Emit:
     except Exception:
         return lambda _message: None
     return lambda message: writer({"message": message})
+
+
+def emit_step(message: str, step: dict[str, Any]) -> None:
+    """Paso ReAct observable (tool, entrada, observación) para UI, trazas y persistencia."""
+    try:
+        writer = get_stream_writer()
+    except Exception:
+        return
+    writer({"message": message, "step": step})

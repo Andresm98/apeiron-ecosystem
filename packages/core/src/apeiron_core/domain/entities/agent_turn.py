@@ -1,6 +1,6 @@
 """Posición publicada por un agente durante una ronda."""
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class AgentTurn(TypedDict):
@@ -8,3 +8,5 @@ class AgentTurn(TypedDict):
     round: int
     text: str
     degraded: bool
+    # Interlocutor al que responde este turno (última posición de otro agente), si lo hay.
+    responds_to: NotRequired[str | None]

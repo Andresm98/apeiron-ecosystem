@@ -111,7 +111,7 @@ async def test_public_api_tool_parses_arxiv_and_degrades_on_failure():
     bad = httpx.AsyncClient(
         transport=httpx.MockTransport(lambda r: httpx.Response(503))
     )
-    out = await McpPublicApiTool(ArxivClient(bad)).run("x")
+    out = await McpPublicApiTool(ArxivClient(bad)).run("three body")
     assert "no disponible" in out
 
 
@@ -276,3 +276,30 @@ def test_json_formatter_normalizes_empty_token_usage():
     formatted = json.loads(formatter.format(record))
     assert formatted["token_usage"] is None
 
+
+
+async def test_arxiv_search_uses_relevance_and_and_terms_with_fallback():
+    import httpx
+
+    from apeiron_infra.tools.public_api import ArxivClient, arxiv_query
+
+    assert arxiv_query("Fermi paradox technosignatures recent review") == (
+        "all:Fermi AND all:paradox AND all:technosignatures"
+    )
+    feed = (
+        '<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Fermi</title>'
+        "<published>2024-01-01</published><id>u</id><summary>s</summary></entry></feed>"
+    )
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        empty = '<feed xmlns="http://www.w3.org/2005/Atom"></feed>'
+        return httpx.Response(200, text=feed if len(seen) == 2 else empty)
+
+    client = ArxivClient(httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    items = await client.search("Fermi paradox technosignatures constraints")
+    assert [i["title"] for i in items] == ["Fermi"]
+    assert seen[0].url.params["sortBy"] == "relevance"
+    assert seen[0].url.params["search_query"].count(" AND ") == 3  # 4 términos
+    assert seen[1].url.params["search_query"] == "all:Fermi AND all:paradox"  # fallback a 2

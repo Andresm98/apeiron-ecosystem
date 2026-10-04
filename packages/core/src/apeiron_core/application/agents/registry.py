@@ -29,8 +29,9 @@ class AgentRegistry:
         tools: Mapping[str, ToolPort] | None = None,
         max_steps: int = 4,
         tool_timeout_s: float = 20.0,
+        require_evidence: bool = False,
     ) -> dict[str, SpecialistAgent]:
         return {
-            name: factory.create(llm, tools or {}, max_steps, tool_timeout_s)
+            name: factory.create(llm, tools or {}, max_steps, tool_timeout_s, require_evidence)
             for name, factory in self._factories.items()
         }

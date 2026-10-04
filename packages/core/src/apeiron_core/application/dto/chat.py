@@ -6,5 +6,5 @@ from typing import Any, Literal
 
 @dataclass(frozen=True)
 class ChatEvent:
-    type: Literal["trace", "turn", "answer"]
+    type: Literal["trace", "turn", "node", "answer"]
     data: dict[str, Any]

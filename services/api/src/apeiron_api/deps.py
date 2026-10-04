@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import replace
 from typing import Annotated
 
@@ -37,14 +38,15 @@ async def current_user(
     container: Annotated[Container, Depends(get_container)],
 ) -> str:
     try:
-        user = container.tokens.decode(token)
+        # Supabase puede descargar el JWKS en la primera verificación: fuera del event loop.
+        user = await asyncio.to_thread(container.tokens.decode, token)
     except InvalidTokenError:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "token inválido",
             {"WWW-Authenticate": "Bearer"},
         ) from None
-    request_ctx.set(replace(request_ctx.get(), user_id=user))
+    request_ctx.set(replace(request_ctx.get(), user_id=user, access_token=token))
     return user
 
 

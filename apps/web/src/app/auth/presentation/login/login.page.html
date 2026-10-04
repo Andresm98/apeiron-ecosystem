@@ -1,0 +1,124 @@
+<div class="login-shell">
+  <section class="brand" aria-labelledby="brand-title">
+    <a class="wordmark" href="/" aria-label="Ápeiron">
+      <span class="wordmark-symbol" aria-hidden="true">Α</span>
+      <span>
+        <span class="wordmark-kicker">Filosofía · Ciencia · Debate</span>
+        <span class="wordmark-name brand-name">Ápeiron</span>
+      </span>
+    </a>
+
+    <div class="brand-copy">
+      <p class="eyebrow brand-eyebrow">ECOSISTEMA AGÉNTICO</p>
+      <h1 id="brand-title">Lo ilimitado, razonado por agentes.</h1>
+      <p class="brand-lead">
+        Un orquestador coordina a dos filósofos que razonan, consultan herramientas y debaten
+        entre sí. Tú ves el grafo operando en tiempo real.
+      </p>
+    </div>
+
+    <ol class="architecture" aria-label="Arquitectura">
+      <li><span class="step">01</span><span><strong>Ápeiron</strong> enruta, supervisa cada turno y sintetiza.</span></li>
+      <li><span class="step">02</span><span><strong>Anaximandro</strong> propone desde el ápeiron, con lógica formal y memoria.</span></li>
+      <li><span class="step">03</span><span><strong>Heráclito</strong> le replica desde el devenir y el logos.</span></li>
+    </ol>
+  </section>
+
+  <main class="panel" aria-labelledby="form-title">
+    <div class="panel-inner">
+      <p class="eyebrow">ACCESO</p>
+      <h2 id="form-title">{{ tab() === 'login' ? 'Continúa la investigación' : 'Crea tu cuenta' }}</h2>
+
+      @if (canRegister()) {
+        <div class="tabs" role="tablist" aria-label="Tipo de acceso">
+          <button type="button" role="tab" [attr.aria-selected]="tab() === 'login'" [class.tab-active]="tab() === 'login'" (click)="select('login')">
+            Entrar
+          </button>
+          <button type="button" role="tab" [attr.aria-selected]="tab() === 'register'" [class.tab-active]="tab() === 'register'" (click)="select('register')">
+            Crear cuenta
+          </button>
+        </div>
+      }
+
+      @if (session.notice()) {
+        <p class="notice" role="status">{{ session.notice() }}</p>
+      }
+
+      <form class="form" (ngSubmit)="submit()" novalidate>
+        <label class="field">
+          <span>{{ usesEmail() ? 'Correo' : 'Usuario' }}</span>
+          <input
+            name="username"
+            [(ngModel)]="username"
+            [type]="usesEmail() ? 'email' : 'text'"
+            [autocomplete]="usesEmail() ? 'email' : 'username'"
+            autocapitalize="off"
+            spellcheck="false"
+            maxlength="254"
+            [placeholder]="usesEmail() ? 'tu@correo.com' : '3 a 64 caracteres'"
+            required
+          />
+        </label>
+
+        <label class="field">
+          <span>Contraseña</span>
+          <span class="password">
+            <input
+              name="password"
+              [(ngModel)]="password"
+              [type]="showPassword() ? 'text' : 'password'"
+              [autocomplete]="tab() === 'login' ? 'current-password' : 'new-password'"
+              minlength="8"
+              maxlength="72"
+              placeholder="8 caracteres o más"
+              required
+            />
+            <button
+              class="reveal"
+              type="button"
+              [attr.aria-pressed]="showPassword()"
+              [attr.aria-label]="showPassword() ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+              (click)="showPassword.set(!showPassword())"
+            >
+              {{ showPassword() ? 'Ocultar' : 'Ver' }}
+            </button>
+          </span>
+        </label>
+
+        @if (tab() === 'register') {
+          <label class="field">
+            <span>Repite la contraseña</span>
+            <input
+              name="confirm"
+              [(ngModel)]="confirm"
+              [type]="showPassword() ? 'text' : 'password'"
+              autocomplete="new-password"
+              maxlength="72"
+              required
+            />
+          </label>
+        }
+
+        @if (error()) {
+          <p class="form-error" role="alert">{{ error() }}</p>
+        }
+
+        <button class="primary-button submit" type="submit" [disabled]="busy()">
+          @if (busy()) {
+            Verificando…
+          } @else {
+            {{ tab() === 'login' ? 'Entrar' : 'Crear cuenta y entrar' }}
+          }
+        </button>
+      </form>
+
+      <p class="fine-print">
+        @if (usesEmail()) {
+          Sesión gestionada por Supabase: se mantiene al recargar y se renueva sola hasta que cierres sesión.
+        } @else {
+          Modo local: la sesión vive solo en esta pestaña (JWT en memoria); al recargar vuelves aquí.
+        }
+      </p>
+    </div>
+  </main>
+</div>

@@ -1,0 +1,169 @@
+:host {
+  display: block;
+  padding: 0 12px;
+}
+
+.graph {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 420px;
+  margin: 0 auto;
+  overflow: visible;
+}
+
+.edge {
+  fill: none;
+  stroke: #c9d1ca;
+  stroke-width: 1.4;
+  transition: stroke 0.25s ease;
+}
+
+.edge-conditional {
+  stroke-dasharray: 4 3;
+}
+
+.edge-visited {
+  stroke: var(--moss-dark);
+}
+
+.edge-current {
+  stroke: var(--rust);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  animation: flow 0.8s linear infinite;
+}
+
+.arrow-head {
+  fill: #8f9b93;
+}
+
+.terminal {
+  fill: var(--surface);
+  stroke: #8f9b93;
+  stroke-width: 1.4;
+}
+
+.terminal-done {
+  fill: var(--moss-dark);
+  stroke: var(--moss-dark);
+}
+
+.node rect,
+.inner rect {
+  stroke-width: 1.3;
+  transition: fill 0.25s ease, stroke 0.25s ease;
+}
+
+.orchestrator rect {
+  fill: #f1f4ef;
+  stroke: var(--forest);
+}
+
+.worker > rect {
+  fill: var(--surface);
+  stroke: #9fb39a;
+}
+
+.inner rect {
+  fill: #f4f6f1;
+  stroke: #c3cec4;
+}
+
+.status-active > rect,
+.inner.status-active rect {
+  fill: #fbeee8;
+  stroke: var(--rust);
+  stroke-width: 2;
+}
+
+.status-done > rect,
+.inner.status-done rect {
+  fill: #e9f0e3;
+  stroke: var(--moss-dark);
+}
+
+.status-error > rect,
+.inner.status-error rect {
+  fill: #fff0eb;
+  stroke: #8c382b;
+  stroke-dasharray: 3 2;
+}
+
+.status-active > rect {
+  animation: glow 1.2s ease-in-out infinite;
+}
+
+text {
+  text-anchor: middle;
+  fill: var(--ink);
+}
+
+.node-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+}
+
+.node-sub,
+.counter {
+  fill: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+}
+
+.inner-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.cycle {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.graph-caption {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.graph-caption code {
+  color: var(--rust);
+  font-weight: 700;
+}
+
+.pulse {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  background: var(--rust);
+  border-radius: 50%;
+  animation: glow 1.2s ease-in-out infinite;
+}
+
+@keyframes flow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+@keyframes glow {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edge-current,
+  .status-active > rect,
+  .pulse {
+    animation: none;
+  }
+}

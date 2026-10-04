@@ -11,6 +11,8 @@ from apeiron_api.settings import Settings
 @pytest.fixture
 def client():
     settings = Settings(
+        _env_file=None,
+        simulation_pace_s=0,
         llm_provider="fake",
         vector_backend="memory",
         jwt_secret="test-secret-test-secret-test-secret-0000",
@@ -75,11 +77,39 @@ def test_chat_stream_sse_contract(client):
         assert r.headers["content-type"].startswith("text/event-stream")
         frames = [f for f in r.read().decode().split("\n\n") if f]
     events = [f.splitlines()[0].removeprefix("event: ") for f in frames]
-    assert events[0] == "trace" and events[-1] == "answer" and events.count("turn") == 2
+    assert events[0] == "node" and events[-1] == "answer" and events.count("turn") == 2
+    assert "trace" in events
     assert (
         json.loads(frames[-1].splitlines()[1].removeprefix("data: "))["mode"]
         == "debate"
     )
+
+
+def test_simulated_stream_walks_full_graph_without_tokens(client):
+    with client.stream(
+        "POST",
+        "/v1/chat/stream",
+        json={"question": "Debate: Fermi", "mode": "debate", "max_rounds": 1, "simulate": True},
+        headers=auth_headers(client),
+    ) as r:
+        frames = [f for f in r.read().decode().split("\n\n") if f]
+    parsed = [
+        (f.splitlines()[0].removeprefix("event: "), json.loads(f.splitlines()[1][6:]))
+        for f in frames
+    ]
+    nodes = {data["node"] for kind, data in parsed if kind == "node"}
+    assert {"apeiron_router", "apeiron_supervisor", "apeiron_synthesis"} <= nodes
+    assert {"anaximandro/act", "heraclito/act"} <= nodes  # ciclo ReAct con tool
+    answer = parsed[-1][1]
+    assert answer["simulate"] is True and answer["usage"]["total_tokens"] == 0
+    assert answer["usage"]["calls"] == 5  # 2 pasos x 2 workers + síntesis
+
+
+def test_agents_endpoint_describes_topology(client):
+    body = client.get("/v1/agents", headers=auth_headers(client)).json()
+    assert body["orchestrator"] == "apeiron"
+    assert [a["name"] for a in body["agents"]] == ["anaximandro", "heraclito"]
+    assert body["debate_participants"] == ["anaximandro", "heraclito"]
 
 
 def test_validation_rejects_bad_rounds(client):
@@ -104,4 +134,4 @@ def test_validation_rejects_bad_rounds(client):
 )
 def test_runtime_settings_enforce_hard_limits(override):
     with pytest.raises(ValidationError):
-        Settings(**override)
+        Settings(_env_file=None, **override)

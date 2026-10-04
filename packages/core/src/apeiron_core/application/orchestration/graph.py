@@ -1,4 +1,12 @@
-"""Grafo de aplicación: supervisor -> agentes -> rondas -> síntesis."""
+"""Grafo Ápeiron (supervisor/worker).
+
+    START -> apeiron_router -> <worker> -> apeiron_supervisor -> <worker> | apeiron_synthesis -> END
+
+Ápeiron es el orquestador: enruta (modo y participantes), supervisa cada turno decidiendo
+el siguiente orador o el cierre, y sintetiza. Cada worker es un nodo con nombre propio; si
+expone `graph`, su ciclo ReAct aparece como subgrafo en LangGraph Studio y en el stream.
+En debate los workers hablan por turnos: cada uno responde a la última posición del otro.
+"""
 
 import asyncio
 import logging
@@ -6,30 +14,95 @@ import time
 from collections.abc import Sequence
 from typing import Any
 
-from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Send
 
-from apeiron_core.application.orchestration.state import ApeironState
+from apeiron_core.application.agents.base import stream_emitter
+from apeiron_core.application.orchestration.state import ApeironInput, ApeironState
 from apeiron_core.application.ports.outbound.agents import SpecialistAgent
-from apeiron_core.application.ports.outbound.events import Emit
 from apeiron_core.application.ports.outbound.llm import LLMPort
 from apeiron_core.domain.entities.agent_turn import AgentTurn
 from apeiron_core.domain.services.routing import decide_agent, decide_mode
 
 log = logging.getLogger("apeiron.graph")
+
+ROUTER = "apeiron_router"
+SUPERVISOR = "apeiron_supervisor"
+SYNTHESIS = "apeiron_synthesis"
+RECURSION_LIMIT = 100  # 4 rondas x 4 workers x (worker + supervisor) + margen
 SYNTH_PROMPT = (
-    "Eres Ápeiron, moderador. Sintetiza coincidencias y desacuerdos del debate, "
-    "en el idioma de los participantes."
+    "Eres Ápeiron, moderador. Sintetiza en un párrafo breve las coincidencias y "
+    "desacuerdos del debate, en el idioma de los participantes."
 )
 
 
-def _emitter() -> Emit:
-    try:
-        writer = get_stream_writer()
-    except Exception:
-        return lambda _message: None
-    return lambda message: writer({"message": message})
+def _validate(
+    agents: dict[str, SpecialistAgent],
+    default_rounds: int,
+    node_timeout_s: float,
+    participants: list[str],
+) -> None:
+    if not agents:
+        raise ValueError("Se requiere al menos un agente registrado")
+    if not 1 <= default_rounds <= 4:
+        raise ValueError("default_rounds debe estar entre 1 y 4")
+    if not 0 < node_timeout_s <= 300:
+        raise ValueError("node_timeout_s debe estar entre 0 y 300")
+    reserved = [n for n in agents if n.startswith(("apeiron_", "__"))]
+    if reserved:
+        raise ValueError(f"nombres de agente reservados: {reserved}")
+    if (
+        not participants
+        or len(participants) > 4
+        or len(set(participants)) != len(participants)
+        or any(name not in agents for name in participants)
+    ):
+        raise ValueError(
+            "debate_participants debe contener de 1 a 4 agentes registrados y únicos"
+        )
+
+
+def _worker_node(name: str, agent: SpecialistAgent, node_timeout_s: float) -> Any:
+    subgraph = getattr(agent, "graph", None)  # referencia directa: Studio lo detecta
+
+    async def worker(state: ApeironState) -> dict[str, Any]:
+        history = state.get("turns", [])
+        started = time.perf_counter()
+        degraded = False
+        try:
+            async with asyncio.timeout(node_timeout_s):
+                if subgraph is not None:
+                    out = await subgraph.ainvoke(
+                        {"question": state["question"], "history": history}
+                    )
+                    text = str(out.get("answer", ""))
+                else:
+                    text = await agent.respond(
+                        state["question"], history, stream_emitter()
+                    )
+        except TimeoutError:
+            text = f"[{name} no respondió dentro de {node_timeout_s:.0f}s]"
+            degraded = True
+        except Exception:
+            log.warning("agent_turn_failed", extra={"agent_name": name})
+            text = f"[{name}: turno degradado por un fallo del agente]"
+            degraded = True
+        log.info(
+            "agent_turn",
+            extra={
+                "agent_name": name,
+                "state_transition": f"{name}:r{state['round']}",
+                "execution_time_ms": round((time.perf_counter() - started) * 1000, 1),
+            },
+        )
+        turn: AgentTurn = {
+            "agent": name,
+            "round": state["round"],
+            "text": text,
+            "degraded": degraded,
+        }
+        return {"turns": [turn], "trace": [f"[{name} Thinking r{state['round']}]"]}
+
+    return worker
 
 
 def build_graph(
@@ -39,39 +112,11 @@ def build_graph(
     node_timeout_s: float = 60.0,
     debate_participants: Sequence[str] | None = None,
 ) -> Any:
-    if not agents:
-        raise ValueError("Se requiere al menos un agente registrado")
-    if not 1 <= default_rounds <= 4:
-        raise ValueError("default_rounds debe estar entre 1 y 4")
-    if not 0 < node_timeout_s <= 300:
-        raise ValueError("node_timeout_s debe estar entre 0 y 300")
     selected_participants = list(debate_participants or agents)
-    if (
-        not selected_participants
-        or len(selected_participants) > 4
-        or len(set(selected_participants)) != len(selected_participants)
-        or any(name not in agents for name in selected_participants)
-    ):
-        raise ValueError(
-            "debate_participants debe contener de 1 a 4 agentes registrados y únicos"
-        )
+    _validate(agents, default_rounds, node_timeout_s, selected_participants)
     default_agent = next(iter(agents))
 
-    def sends(state: ApeironState) -> list[Send]:
-        return [
-            Send(
-                "agent_turn",
-                {
-                    "agent": agent_name,
-                    "question": state["question"],
-                    "turns": state.get("turns", []),
-                    "round": state["round"],
-                },
-            )
-            for agent_name in state["participants"]
-        ]
-
-    async def supervisor(state: ApeironState) -> dict[str, Any]:
+    async def apeiron_router(state: ApeironState) -> dict[str, Any]:
         mode = state.get("mode") or decide_mode(state["question"])
         participants = (
             selected_participants
@@ -84,62 +129,38 @@ def build_graph(
             raise ValueError("max_rounds debe estar entre 1 y 4")
         log.info(
             "route",
-            extra={"agent_name": "apeiron", "state_transition": f"supervisor->{mode}"},
+            extra={"agent_name": "apeiron", "state_transition": f"router->{mode}"},
         )
         return {
             "mode": mode,
             "participants": participants,
             "round": 0,
+            "speaker": 0,
             "max_rounds": rounds if mode == "debate" else 1,
-            "trace": ["[Ápeiron Routing]"],
+            "trace": ["[Ápeiron Routing]", f"[Ápeiron Delegating → {participants[0]} r0]"],
         }
 
-    async def agent_turn(payload: dict[str, Any]) -> dict[str, Any]:
-        name: str = payload["agent"]
-        started = time.perf_counter()
-        degraded = False
-        try:
-            async with asyncio.timeout(node_timeout_s):
-                text = await agents[name].respond(
-                    payload["question"], payload["turns"], _emitter()
-                )
-        except TimeoutError:
-            text = f"[{name} no respondió dentro de {node_timeout_s:.0f}s]"
-            degraded = True
-        except Exception:
-            log.warning("agent_turn_failed", extra={"agent_name": name})
-            text = f"[{name}: turno degradado por un fallo del agente]"
-            degraded = True
-        log.info(
-            "agent_turn",
-            extra={
-                "agent_name": name,
-                "state_transition": f"agent_turn:r{payload['round']}",
-                "execution_time_ms": round((time.perf_counter() - started) * 1000, 1),
-            },
-        )
-        turn: AgentTurn = {
-            "agent": name,
-            "round": payload["round"],
-            "text": text,
-            "degraded": degraded,
-        }
-        return {
-            "turns": [turn],
-            "trace": [f"[{name} Thinking r{payload['round']}]"],
-        }
+    def to_speaker(state: ApeironState) -> str:
+        return state["participants"][state["speaker"]]
 
-    async def round_gate(state: ApeironState) -> dict[str, Any]:
-        return {"round": state["round"] + 1}
+    async def apeiron_supervisor(state: ApeironState) -> dict[str, Any]:
+        speaker, rnd = state["speaker"] + 1, state["round"]
+        if speaker >= len(state["participants"]):
+            speaker, rnd = 0, rnd + 1
+        if rnd >= state["max_rounds"]:
+            message = "[Ápeiron Closing Debate]" if state["mode"] == "debate" else "[Ápeiron Reviewing]"
+        else:
+            message = f"[Ápeiron Delegating → {state['participants'][speaker]} r{rnd}]"
+        return {"speaker": speaker, "round": rnd, "trace": [message]}
 
-    def after_gate(state: ApeironState) -> list[Send] | str:
-        return sends(state) if state["round"] < state["max_rounds"] else "synthesis"
+    def after_supervisor(state: ApeironState) -> str:
+        return SYNTHESIS if state["round"] >= state["max_rounds"] else to_speaker(state)
 
-    async def synthesis(state: ApeironState) -> dict[str, Any]:
+    async def apeiron_synthesis(state: ApeironState) -> dict[str, Any]:
         turns = state["turns"]
         if state["mode"] == "single":
             return {"answer": turns[0]["text"], "trace": ["[Response Generation]"]}
-        if turns and all(t.get("degraded") for t in turns):
+        if turns and all(t["degraded"] for t in turns):
             return {
                 "answer": "Síntesis degradada; ningún especialista completó un turno.",
                 "trace": ["[Synthesis]"],
@@ -161,19 +182,18 @@ def build_graph(
                 answer = f"Síntesis degradada; turnos completados:\n{transcript}"
             else:
                 answer = "Síntesis degradada; ningún especialista completó un turno."
-        return {
-            "answer": answer,
-            "trace": ["[Synthesis]"],
-        }
+        return {"answer": answer, "trace": ["[Synthesis]"]}
 
-    graph = StateGraph(ApeironState)
-    graph.add_node("supervisor", supervisor)
-    graph.add_node("agent_turn", agent_turn)  # type: ignore[arg-type]  # payload de Send, no ApeironState
-    graph.add_node("round_gate", round_gate)
-    graph.add_node("synthesis", synthesis)
-    graph.add_edge(START, "supervisor")
-    graph.add_conditional_edges("supervisor", sends, ["agent_turn"])
-    graph.add_edge("agent_turn", "round_gate")
-    graph.add_conditional_edges("round_gate", after_gate, ["agent_turn", "synthesis"])
-    graph.add_edge("synthesis", END)
-    return graph.compile()
+    workers = list(agents)
+    graph = StateGraph(ApeironState, input_schema=ApeironInput)
+    graph.add_node(ROUTER, apeiron_router)
+    for name, agent in agents.items():
+        graph.add_node(name, _worker_node(name, agent, node_timeout_s))
+        graph.add_edge(name, SUPERVISOR)
+    graph.add_node(SUPERVISOR, apeiron_supervisor)
+    graph.add_node(SYNTHESIS, apeiron_synthesis)
+    graph.add_edge(START, ROUTER)
+    graph.add_conditional_edges(ROUTER, to_speaker, workers)
+    graph.add_conditional_edges(SUPERVISOR, after_supervisor, [*workers, SYNTHESIS])
+    graph.add_edge(SYNTHESIS, END)
+    return graph.compile(name="apeiron").with_config(recursion_limit=RECURSION_LIMIT)

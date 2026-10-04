@@ -1,0 +1,10 @@
+{
+  "$schema": "https://langgra.ph/schema.json",
+  "python_version": "3.13",
+  "dependencies": ["./packages/core", "./packages/infra[llm,chroma,mcp]", "./services/api"],
+  "graphs": {
+    "apeiron": "./services/api/src/apeiron_api/studio.py:apeiron",
+    "apeiron_demo": "./services/api/src/apeiron_api/studio.py:apeiron_demo"
+  },
+  "env": ".env"
+}

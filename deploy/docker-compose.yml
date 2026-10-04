@@ -1,5 +1,7 @@
 # Desarrollo: docker compose -f deploy/docker-compose.yml up --build
 # docker compose -f deploy/docker-compose.yml --profile web up --build
+# LangGraph Studio: docker compose -f deploy/docker-compose.yml --profile studio up --build studio
+#   -> https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 
 # Producción: --profile web, imágenes ECR inyectadas por deploy-ec2.yml.
 services:
@@ -14,6 +16,8 @@ services:
     environment:
       APEIRON_CHROMA_HOST: chroma
       APEIRON_CHROMA_PORT: "8000"
+    volumes:
+      - api-data:/app/data          # usuarios SQLite (APEIRON_USERS_DB_PATH=data/users.db)
     depends_on:
       - chroma
     ports:
@@ -40,5 +44,21 @@ services:
       - "80:80"
     restart: unless-stopped
 
+  studio:
+    profiles: ["studio"]            # solo desarrollo: servidor `langgraph dev` para Studio
+    image: apeiron-studio:local
+    build:
+      context: ..
+      dockerfile: deploy/docker/studio.Dockerfile
+    env_file: ../.env
+    environment:
+      APEIRON_CHROMA_HOST: chroma
+      APEIRON_CHROMA_PORT: "8000"
+    depends_on:
+      - chroma
+    ports:
+      - "127.0.0.1:2024:2024"
+
 volumes:
+  api-data:
   chroma-data:

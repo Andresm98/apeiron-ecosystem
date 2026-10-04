@@ -1,0 +1,94 @@
+<svg
+  class="graph"
+  [attr.viewBox]="'0 0 ' + W + ' ' + H"
+  role="img"
+  aria-label="Grafo de ejecución: Ápeiron enruta, supervisa y sintetiza; los workers razonan y usan herramientas"
+>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" class="arrow-head" />
+    </marker>
+  </defs>
+
+  <!-- Aristas -->
+  <path [attr.class]="edgeClass(START, 'apeiron_router')" [attr.d]="curve(cx, 14, cx, y.router)" marker-end="url(#arrow)" />
+  @for (wk of workers(); track wk.name) {
+    <path
+      [attr.class]="edgeClass('apeiron_router', wk.name) + ' edge-conditional'"
+      [attr.d]="curve(cx, y.router + y.box, wk.cx, y.worker)"
+      marker-end="url(#arrow)"
+    />
+    <path
+      [attr.class]="edgeClass(wk.name, 'apeiron_supervisor')"
+      [attr.d]="curve(wk.cx - 10, y.worker + y.workerH, cx - 12, y.supervisor)"
+      marker-end="url(#arrow)"
+    />
+    <path
+      [attr.class]="edgeClass('apeiron_supervisor', wk.name) + ' edge-conditional'"
+      [attr.d]="curve(cx + 12, y.supervisor, wk.cx + 10, y.worker + y.workerH)"
+      marker-end="url(#arrow)"
+    />
+  }
+  <path
+    [attr.class]="edgeClass('apeiron_supervisor', 'apeiron_synthesis') + ' edge-conditional'"
+    [attr.d]="curve(cx, y.supervisor + y.box, cx, y.synthesis)"
+    marker-end="url(#arrow)"
+  />
+  <path [attr.class]="edgeClass('apeiron_synthesis', END)" [attr.d]="curve(cx, y.synthesis + y.box, cx, y.end - 8)" marker-end="url(#arrow)" />
+
+  <!-- Terminales -->
+  <circle class="terminal" [attr.cx]="cx" cy="8" r="6" />
+  <circle class="terminal" [class.terminal-done]="edgeClass('apeiron_synthesis', END) !== 'edge'" [attr.cx]="cx" [attr.cy]="y.end" r="7" />
+
+  <!-- Ápeiron: orquestador -->
+  <g [attr.class]="'node orchestrator status-' + status('apeiron_router')">
+    <rect [attr.x]="cx - 90" [attr.y]="y.router" width="180" [attr.height]="y.box" rx="4" />
+    <text [attr.x]="cx" [attr.y]="y.router + 15" class="node-title">Ápeiron · router</text>
+    <text [attr.x]="cx" [attr.y]="y.router + 27" class="node-sub">modo y participantes</text>
+  </g>
+
+  @for (wk of workers(); track wk.name) {
+    <g [attr.class]="'node worker status-' + status(wk.name)">
+      <rect [attr.x]="wk.x" [attr.y]="y.worker" [attr.width]="wk.w" [attr.height]="y.workerH" rx="5" />
+      <text [attr.x]="wk.cx" [attr.y]="y.worker + 17" class="node-title">{{ label(wk.name) }}</text>
+      <text [attr.x]="wk.cx" [attr.y]="y.worker + 30" class="node-sub">worker · ReAct</text>
+
+      <g [attr.class]="'inner status-' + status(wk.name + '/reason')">
+        <rect [attr.x]="wk.x + 8" [attr.y]="y.worker + 42" [attr.width]="wk.hasTools ? wk.w / 2 - 12 : wk.w - 16" height="26" rx="13" />
+        <text [attr.x]="wk.hasTools ? wk.x + 8 + (wk.w / 2 - 12) / 2 : wk.cx" [attr.y]="y.worker + 59" class="inner-label">reason</text>
+      </g>
+      @if (wk.hasTools) {
+        <text [attr.x]="wk.cx" [attr.y]="y.worker + 60" class="cycle" aria-hidden="true">⇄</text>
+        <g [attr.class]="'inner status-' + status(wk.name + '/act')">
+          <rect [attr.x]="wk.cx + 4" [attr.y]="y.worker + 42" [attr.width]="wk.w / 2 - 12" height="26" rx="13" />
+          <text [attr.x]="wk.cx + 4 + (wk.w / 2 - 12) / 2" [attr.y]="y.worker + 59" class="inner-label">act · tool</text>
+        </g>
+      }
+      <text [attr.x]="wk.cx" [attr.y]="y.worker + 88" class="counter">
+        turnos {{ visits(wk.name) }} · pasos {{ visits(wk.name + '/reason') }} · tools {{ visits(wk.name + '/act') }}
+      </text>
+    </g>
+  }
+
+  <g [attr.class]="'node orchestrator status-' + status('apeiron_supervisor')">
+    <rect [attr.x]="cx - 90" [attr.y]="y.supervisor" width="180" [attr.height]="y.box" rx="4" />
+    <text [attr.x]="cx" [attr.y]="y.supervisor + 15" class="node-title">Ápeiron · supervisor</text>
+    <text [attr.x]="cx" [attr.y]="y.supervisor + 27" class="node-sub">siguiente orador o cierre · {{ visits('apeiron_supervisor') }}×</text>
+  </g>
+
+  <g [attr.class]="'node orchestrator status-' + status('apeiron_synthesis')">
+    <rect [attr.x]="cx - 90" [attr.y]="y.synthesis" width="180" [attr.height]="y.box" rx="4" />
+    <text [attr.x]="cx" [attr.y]="y.synthesis + 15" class="node-title">Ápeiron · síntesis</text>
+    <text [attr.x]="cx" [attr.y]="y.synthesis + 27" class="node-sub">acuerdos y desacuerdos</text>
+  </g>
+</svg>
+
+<p class="graph-caption" aria-live="polite">
+  @if (activeNode(); as node) {
+    <span class="pulse" aria-hidden="true"></span> Ejecutando <code>{{ node }}</code>
+  } @else if (run().edges.length) {
+    Recorrido: {{ run().edges.length }} transiciones
+  } @else {
+    Ápeiron orquesta; los workers razonan (reason) y usan herramientas (act).
+  }
+</p>

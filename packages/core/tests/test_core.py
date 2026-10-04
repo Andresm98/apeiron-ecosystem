@@ -171,4 +171,65 @@ async def test_react_never_returns_unmarked_reasoning_as_answer():
 async def test_facade_stream_emits_trace_turn_answer():
     facade = ApeironFacade(make_graph({"formal_logic_calculator": EchoTool()}))
     kinds = [e.type async for e in facade.stream("debate: tres cuerpos", None, 1)]
-    assert kinds[0] == "trace" and kinds[-1] == "answer" and kinds.count("turn") == 2
+    assert kinds[0] == "node" and kinds[-1] == "answer" and kinds.count("turn") == 2
+    assert "trace" in kinds
+
+
+def test_graph_topology_exposes_orchestrator_workers_and_react_subgraphs():
+    drawing = make_graph({"formal_logic_calculator": EchoTool()}).get_graph(xray=True)
+    nodes = set(drawing.nodes)
+    assert {"apeiron_router", "apeiron_supervisor", "apeiron_synthesis"} <= nodes
+    assert {"anaximandro:reason", "anaximandro:act", "heraclito:reason"} <= nodes
+    assert "heraclito:act" not in nodes  # sus tools no están en el catálogo inyectado
+
+
+class RecordingLLM:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    async def complete(self, system: str, user: str) -> str:
+        self.calls.append((system, user))
+        return f"posición {len(self.calls)}"
+
+
+async def test_debate_workers_reply_to_each_other_in_turns():
+    llm = RecordingLLM()
+    reg = AgentRegistry()
+    reg.register(AnaximandroFactory())
+    reg.register(HeraclitoFactory())
+    graph = build_graph(reg.build_all(llm), llm)
+    out = await graph.ainvoke({"question": "Debate: el cambio", "max_rounds": 2})
+    order = [(t["agent"], t["round"]) for t in out["turns"]]
+    assert order == [("anaximandro", 0), ("heraclito", 0), ("anaximandro", 1), ("heraclito", 1)]
+    heraclito_r0 = llm.calls[1][1]
+    assert "Tu interlocutor" in heraclito_r0 and "anaximandro (ronda 1): posición 1" in heraclito_r0
+    assert "heraclito (ronda 1): posición 2" in llm.calls[2][1]
+    assert "[Ápeiron Delegating → heraclito r0]" in out["trace"]
+    assert out["trace"][-1] == "[Synthesis]" and len(llm.calls) == 5
+
+
+async def test_facade_stream_reports_inner_nodes_and_usage():
+    from apeiron_core.application.usage import record_usage
+
+    class MeteredLLM(ScriptedLLM):
+        async def complete(self, system: str, user: str) -> str:
+            record_usage(10, 5)
+            return await super().complete(system, user)
+
+    llm = MeteredLLM(
+        [
+            "Thought: verifico\nAction: formal_logic_calculator\nAction Input: P |- P",
+            "Final Answer: válido",
+        ]
+    )
+    agent = ReActAgent("anaximandro", "persona", llm, [EchoTool()])
+    facade = ApeironFacade(build_graph({"anaximandro": agent}, llm))
+    events = [e async for e in facade.stream("¿válido?", "single", None)]
+    nodes = {e.data["node"] for e in events if e.type == "node"}
+    assert {"apeiron_router", "anaximandro", "anaximandro/reason", "anaximandro/act"} <= nodes
+    assert "[anaximandro Executing Tool: formal_logic_calculator]" in [
+        m for e in events if e.type == "trace" for m in e.data["messages"]
+    ]
+    answer = events[-1].data
+    assert answer["answer"] == "válido"
+    assert answer["usage"] == {"calls": 2, "input_tokens": 20, "output_tokens": 10, "total_tokens": 30}

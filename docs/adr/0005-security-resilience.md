@@ -1,6 +1,6 @@
 # ADR-005: Autenticación, autorización y resiliencia
 
-**Estado:** COMPLETADO  
+**Estado:** COMPLETADO — identidad y sesiones con Supabase en [ADR-010](0010-supabase-sessions-runs.md); este ADR rige el modo `local`  
 **Fecha:** 2026-10-03
 
 ## Contexto

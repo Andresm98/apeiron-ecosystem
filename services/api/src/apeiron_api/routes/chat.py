@@ -20,8 +20,12 @@ def sse(event: str, data: dict[str, Any]) -> str:
 
 
 @router.get("/agents")
-async def agents(_: Annotated[str, Depends(current_user)]) -> dict[str, list[str]]:
-    return {"agents": ["anaximandro", "heraclito"], "modes": ["single", "debate"]}
+async def agents(
+    _: Annotated[str, Depends(current_user)],
+    c: Annotated[Container, Depends(get_container)],
+) -> dict[str, Any]:
+    """Topología del grafo para la UI: orquestador, workers, tools y límites."""
+    return c.topology
 
 
 @router.post("/chat")
@@ -30,9 +34,13 @@ async def chat(
     _: Annotated[str, Depends(enforce_chat_rate)],
     c: Annotated[Container, Depends(get_container)],
 ) -> ChatResponse:
-    out = await c.facade.ask(body.question, body.mode, body.max_rounds)
+    out = await c.facade.ask(body.question, body.mode, body.max_rounds, body.simulate)
     return ChatResponse(
-        answer=out["answer"], mode=out["mode"], turns=out["turns"], trace=out["trace"]
+        answer=out["answer"],
+        mode=out["mode"],
+        turns=out["turns"],
+        trace=out["trace"],
+        usage=out["usage"],
     )
 
 
@@ -47,7 +55,9 @@ async def chat_stream(
     async def events() -> AsyncIterator[str]:
         request_ctx.set(ctx)
         try:
-            async for ev in c.facade.stream(body.question, body.mode, body.max_rounds):
+            async for ev in c.facade.stream(
+                body.question, body.mode, body.max_rounds, body.simulate
+            ):
                 yield sse(ev.type, ev.data)
         except Exception:
             log.exception("stream_failed")

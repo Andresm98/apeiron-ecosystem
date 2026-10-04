@@ -29,7 +29,13 @@ ENV PYTHONUNBUFFERED=1 \
     HOME=/home/app
 
 RUN groupadd --system app \
-    && useradd --system --gid app --create-home app
+    && useradd --system --gid app --create-home app \
+    && mkdir -p /app/data \
+    && chown -R app:app /app
+
+# Rutas relativas (p. ej. APEIRON_USERS_DB_PATH=data/users.db) resuelven bajo /app.
+# /app/data es propiedad de `app`; un volumen nombrado montado ahí hereda ese owner.
+WORKDIR /app
 
 COPY --from=builder /install /usr/local
 

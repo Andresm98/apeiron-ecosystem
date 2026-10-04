@@ -9,9 +9,17 @@ from apeiron_core.domain.value_objects.mode import Mode
 
 class ChatUseCasePort(Protocol):
     async def ask(
-        self, question: str, mode: Mode | None = None, max_rounds: int | None = None
+        self,
+        question: str,
+        mode: Mode | None = None,
+        max_rounds: int | None = None,
+        simulate: bool = False,
     ) -> dict[str, Any]: ...
 
     def stream(
-        self, question: str, mode: Mode | None = None, max_rounds: int | None = None
+        self,
+        question: str,
+        mode: Mode | None = None,
+        max_rounds: int | None = None,
+        simulate: bool = False,
     ) -> AsyncIterator[ChatEvent]: ...

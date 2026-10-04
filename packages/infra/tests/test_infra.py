@@ -267,6 +267,7 @@ async def test_sqlite_user_repository(tmp_path):
 def test_json_formatter_normalizes_empty_token_usage():
     import json
     import logging
+
     from apeiron_infra.observability.logging import JsonFormatter
 
     formatter = JsonFormatter()

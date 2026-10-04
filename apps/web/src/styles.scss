@@ -54,3 +54,177 @@ textarea:focus-visible {
   outline: 2px solid var(--rust);
   outline-offset: 2px;
 }
+/* --- Compartido por login y consola --- */
+
+:host {
+  display: block;
+  min-height: 100vh;
+}
+
+.app-shell {
+  width: min(100%, 1680px);
+  margin: 0 auto;
+  padding: 0 28px 22px;
+}
+
+.masthead {
+  min-height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 13px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.wordmark-symbol {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  color: var(--paper);
+  background: var(--forest);
+  border-radius: 50%;
+  font-family: Georgia, serif;
+  font-size: 27px;
+}
+
+.wordmark-kicker,
+.wordmark-name {
+  display: block;
+}
+
+.wordmark-kicker,
+.eyebrow,
+.turn-label,
+.turn-round {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.wordmark-name {
+  margin-top: 2px;
+  color: var(--forest);
+  font-family: var(--font-display);
+  font-size: 26px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  background: var(--moss);
+  border-radius: 50%;
+}
+
+.status-dot-muted {
+  background: #aeb8b0;
+}
+
+.form-error {
+  margin: 0;
+  color: var(--rust);
+  font-size: 12px;
+}
+
+.primary-button,
+.quiet-button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary-button {
+  color: white;
+  background: var(--rust);
+}
+
+.primary-button:hover:not(:disabled) {
+  background: #a84731;
+}
+
+.primary-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.quiet-button {
+  color: var(--forest);
+  background: transparent;
+}
+
+.quiet-button:hover:not(:disabled) {
+  background: rgb(255 255 255 / 12%);
+}
+
+.quiet-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.page-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 2px 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 0 14px 18px;
+  }
+
+  .masthead {
+    min-height: 76px;
+  }
+
+  .wordmark-symbol {
+    width: 39px;
+    height: 39px;
+    font-size: 22px;
+  }
+
+  .wordmark-name {
+    font-size: 22px;
+  }
+
+  .wordmark-kicker {
+    font-size: 8px;
+  }
+
+  .session-indicator {
+    gap: 6px;
+    font-size: 10px;
+  }
+
+  .page-footer {
+    font-size: 8px;
+  }
+}

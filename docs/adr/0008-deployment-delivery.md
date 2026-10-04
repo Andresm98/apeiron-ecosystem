@@ -29,6 +29,6 @@ Compose minimiza la carga operativa y se ajusta a un backend desplegable, pero n
 
 ## Estado actual y brechas
 
-Contrastado con el código: `api.Dockerfile` multistage Python 3.14 no-root con healthcheck; `web.Dockerfile` Node 24 + Nginx 1.27; Compose con API, Chroma persistente (sin puerto público) y perfil web; Nginx sin buffering SSE. CI publica tags inmutables en GHCR; CD despliega por SSH con `AWS_SSH_PRIVATE_KEY` y `EC2_HOST`. Chroma fijado a `chromadb/chroma:1.5.9`.
+Contrastado con el código: `api.Dockerfile` multistage Python 3.14 no-root con healthcheck; `web.Dockerfile` Node 24 + Nginx 1.27; Compose con API, Chroma persistente (sin puerto público) y perfil web; Nginx sin buffering SSE. CI publica tags inmutables en GHCR; CD despliega por SSH con `AWS_SSH_PRIVATE_KEY` y `EC2_HOST`. Chroma fijado a `chromadb/chroma:1.5.9`. La imagen API fija `WORKDIR /app` con `/app/data` propiedad del usuario no-root; Compose monta el volumen `api-data` en `/app/data` para persistir usuarios SQLite (`APEIRON_USERS_DB_PATH=data/users.db`).
 
-Gates operativos fuera de esta decisión de arquitectura: persistencia de usuarios, TLS/firewall reales y prueba de backup/restauración del volumen Chroma.
+Gates operativos fuera de esta decisión de arquitectura: TLS/firewall reales y prueba de backup/restauración de los volúmenes `chroma-data` y `api-data`.

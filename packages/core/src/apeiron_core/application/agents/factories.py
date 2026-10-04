@@ -1,9 +1,8 @@
-"""Fábricas de aplicación: cada agente declara persona y tools permitidas."""
+"""Fábricas de workers: cada agente declara persona, rol y tools permitidas."""
 
 from collections.abc import Mapping
 from typing import Protocol
 
-from apeiron_core.application.agents.base import PhilosopherAgent
 from apeiron_core.application.agents.react import ReActAgent
 from apeiron_core.application.ports.outbound.agents import SpecialistAgent
 from apeiron_core.application.ports.outbound.llm import LLMPort
@@ -15,14 +14,17 @@ ANAXIMANDRO_PERSONA = (
     "Responde en el idioma del usuario."
 )
 HERACLITO_PERSONA = (
-    "Eres Heráclito. Razonas desde el devenir y el logos: todo fluye, la realidad es "
-    "tensión y unidad de opuestos. Sé aforístico, directo y polémico. "
-    "Responde en el idioma del usuario."
+    "Eres Heráclito de Éfeso. Razonas desde el devenir y el logos: todo fluye, la realidad "
+    "es tensión y unidad de opuestos. Eres el contrapunto de Anaximandro: donde él ve un "
+    "fondo indeterminado y estable, tú ves conflicto y cambio regidos por una medida. "
+    "Sé aforístico, directo y polémico; responde en pocas frases y en el idioma del usuario."
 )
 
 
 class AgentFactory(Protocol):
     name: str
+    role: str
+    tools: tuple[str, ...]
 
     def create(
         self,
@@ -43,14 +45,13 @@ def _build(
     tool_timeout_s: float,
 ) -> SpecialistAgent:
     selected = [tools[tool_name] for tool_name in wanted if tool_name in tools]
-    if not selected:
-        return PhilosopherAgent(name, persona, llm)
     return ReActAgent(name, persona, llm, selected, max_steps, tool_timeout_s)
 
 
 class AnaximandroFactory:
     name = "anaximandro"
-    tools = (
+    role = "Worker principal: tesis desde el ápeiron, lógica formal y evidencia."
+    tools: tuple[str, ...] = (
         "formal_logic_calculator",
         "mcp_public_api_tool",
         "vector_memory_retriever",
@@ -76,7 +77,8 @@ class AnaximandroFactory:
 
 class HeraclitoFactory:
     name = "heraclito"
-    tools = ("vector_memory_retriever", "mcp_public_api_tool")
+    role = "Worker dialéctico: replica a Anaximandro desde el devenir y el logos."
+    tools: tuple[str, ...] = ("vector_memory_retriever", "mcp_public_api_tool")
 
     def create(
         self,

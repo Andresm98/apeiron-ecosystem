@@ -8,8 +8,9 @@ Usa AMI Amazon Linux y usuario `ec2-user`. Asigna a EC2 una Elastic IP o DNS est
 
 1. Instala Docker Engine y Docker Compose v2. Asegura que `ec2-user` puede ejecutar `sudo -n docker` sin prompt de contraseña.
 2. Crea `/opt/apeiron-ecosystem/.env` antes del primer deploy. Configura `APEIRON_ENV=prod`, `APEIRON_JWT_SECRET` aleatorio (`openssl rand -hex 32`), proveedor/API key LLM, `APEIRON_VECTOR_BACKEND=chroma` y los orígenes CORS reales. El workflow no copia ni sobrescribe `.env`.
-3. Mantén el volumen Docker `chroma-data`; define backup y restauración antes de guardar memoria de usuarios.
-4. Security group: permite 80/443 según TLS y SSH 22 desde rangos de GitHub-hosted runners. No abras 22 a `0.0.0.0/0`. El API se publica solo en `127.0.0.1:8000`; Chroma no publica puertos.
+3. Supabase (identidad, sesiones e historial; ADR-010): en `.env` define `APEIRON_AUTH_PROVIDER=supabase`, `APEIRON_SUPABASE_URL` y `APEIRON_SUPABASE_PUBLISHABLE_KEY`. Ejecuta una vez `deploy/supabase/migrations/0001_agent_runs.sql` en el SQL Editor del proyecto. En *Authentication → URL Configuration*, pon como **Site URL** el dominio público (para los enlaces de confirmación) y mantén activada la confirmación de correo. No hace falta la `service_role` key.
+4. Mantén los volúmenes Docker `chroma-data` (memoria vectorial) y `api-data` (usuarios SQLite); define backup y restauración de ambos antes de guardar datos de usuarios.
+5. Security group: permite 80/443 según TLS y SSH 22 desde rangos de GitHub-hosted runners. No abras 22 a `0.0.0.0/0`. El API se publica solo en `127.0.0.1:8000`; Chroma no publica puertos.
 
 ## Configuración de GitHub
 
@@ -35,4 +36,4 @@ Antes del deploy, CD verifica acceso SSH, `sudo -n`, Docker Compose y lectura de
 
 Pull requests no publican ni despliegan. Un solo host puede tener una interrupción breve durante la recreación de contenedores. Para rollback, vuelve a ejecutar el deploy de un tag GHCR anterior. El escaneo SSH de primera conexión usa `ssh-keyscan`; para una política de host-key estricta, añade el fingerprint conocido de la instancia.
 
-La app Angular se construye en CI y el artefacto servido queda en `dist/apeiron-web/browser`. Termina TLS en un balanceador o proxy delante de Nginx y conserva el SSE sin buffering. Antes de producción pública sigue pendiente reemplazar `InMemoryUserRepository` por persistencia y validar backups de Chroma.
+La app Angular se construye en CI y el artefacto servido queda en `dist/apeiron-web/browser`. Termina TLS en un balanceador o proxy delante de Nginx y conserva el SSE sin buffering. Antes de producción pública, valida el backup y la restauración de los volúmenes `api-data` (usuarios SQLite) y `chroma-data` (memoria vectorial).

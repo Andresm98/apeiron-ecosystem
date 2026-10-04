@@ -1,6 +1,6 @@
 # ADR-003: Topología LangGraph, supervisor y agentes ReAct
 
-**Estado:** COMPLETADO  
+**Estado:** COMPLETADO — topología de debate reemplazada por [ADR-009](0009-supervisor-worker-studio.md)  
 **Fecha:** 2026-10-03
 
 ## Contexto

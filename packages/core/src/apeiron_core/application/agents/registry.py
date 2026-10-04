@@ -17,6 +17,12 @@ class AgentRegistry:
     def register(self, factory: AgentFactory) -> None:
         self._factories[factory.name] = factory
 
+    def describe(self) -> list[dict[str, object]]:
+        return [
+            {"name": f.name, "role": f.role, "tools": list(f.tools)}
+            for f in self._factories.values()
+        ]
+
     def build_all(
         self,
         llm: LLMPort,

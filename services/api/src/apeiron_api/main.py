@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from apeiron_api.container import Container, build_container
-from apeiron_api.routes import auth, chat, memory
+from apeiron_api.routes import auth, chat, memory, runs
 from apeiron_api.settings import Settings
 from apeiron_core.application.context import request_ctx
 
@@ -47,4 +47,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(chat.router)
     app.include_router(memory.router)
+    app.include_router(runs.router)
     return app

@@ -19,6 +19,7 @@ class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     mode: Mode | None = None
     max_rounds: int | None = Field(default=None, ge=1, le=4)
+    simulate: bool = False  # LLM determinista: recorre todo el grafo con 0 tokens
 
 
 class ChatResponse(BaseModel):
@@ -26,3 +27,4 @@ class ChatResponse(BaseModel):
     mode: str
     turns: list[dict[str, Any]]
     trace: list[str]
+    usage: dict[str, int] = Field(default_factory=dict)

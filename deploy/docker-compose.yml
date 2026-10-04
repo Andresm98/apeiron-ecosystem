@@ -1,0 +1,40 @@
+# Uso: docker compose -f deploy/docker-compose.yml up --build            (api + chroma)
+#      docker compose -f deploy/docker-compose.yml --profile web up --build   (+ frontend Nginx)
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/docker/api.Dockerfile
+      args:
+        PYTHON_VERSION: "3.13"
+    env_file: ../.env
+    environment:
+      APEIRON_CHROMA_HOST: chroma
+      APEIRON_CHROMA_PORT: "8000"
+    depends_on:
+      - chroma
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  chroma:
+    image: chromadb/chroma:latest   # fija una versión concreta en producción
+    environment:
+      IS_PERSISTENT: "TRUE"
+    volumes:
+      - chroma-data:/data           # verifica la ruta de persistencia según la versión de la imagen
+    restart: unless-stopped
+
+  web:
+    profiles: ["web"]
+    build:
+      context: ..
+      dockerfile: deploy/docker/web.Dockerfile
+    depends_on:
+      - api
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
+volumes:
+  chroma-data:

@@ -1,0 +1,127 @@
+import httpx
+import pytest
+
+from apeiron_core.domain.context import RequestContext, request_ctx
+from apeiron_infra.llm.langchain_llm import LangChainLLM
+from apeiron_infra.llm.resilient import ResilientLLM
+from apeiron_infra.memory.vector import InMemoryVectorStore, seed_global
+from apeiron_infra.resilience import CircuitBreaker, CircuitOpenError, call_with_retry
+from apeiron_infra.security.tokens import InvalidTokenError, TokenService, hash_password, verify_password
+from apeiron_infra.tools.formal_logic import FormalLogicCalculator, evaluate
+from apeiron_infra.tools.public_api import ArxivClient, McpPublicApiTool
+from apeiron_infra.tools.vector_memory import VectorMemoryRetriever
+
+
+class Flaky:
+    def __init__(self, fail_times: int) -> None:
+        self.fail, self.calls = fail_times, 0
+
+    async def complete(self, system: str, user: str) -> str:
+        self.calls += 1
+        if self.calls <= self.fail:
+            raise ConnectionError("boom")
+        return "ok"
+
+
+class Const:
+    async def complete(self, system: str, user: str) -> str:
+        return "fallback"
+
+
+async def test_retry_recovers_after_transient_failures():
+    llm = Flaky(2)
+    out = await call_with_retry(lambda: llm.complete("", ""), attempts=3, base_delay_s=0.001)
+    assert out == "ok" and llm.calls == 3
+
+
+async def test_timeout_triggers_failure():
+    import asyncio
+
+    async def slow() -> str:
+        await asyncio.sleep(1)
+        return "x"
+
+    with pytest.raises(TimeoutError):
+        await call_with_retry(slow, attempts=1, timeout_s=0.01)
+
+
+async def test_breaker_opens_then_half_open_recovers():
+    now = [0.0]
+    br = CircuitBreaker(failure_threshold=2, recovery_timeout_s=10, clock=lambda: now[0])
+    llm = Flaky(99)
+    for _ in range(2):
+        with pytest.raises(ConnectionError):
+            await br.call(lambda: llm.complete("", ""))
+    assert br.state == "open"
+    with pytest.raises(CircuitOpenError):
+        await br.call(lambda: llm.complete("", ""))
+    now[0] = 11
+    assert br.state == "half_open"
+    llm.fail = 0
+    assert await br.call(lambda: llm.complete("", "")) == "ok" and br.state == "closed"
+
+
+async def test_resilient_llm_uses_fallback_when_primary_dies():
+    r = ResilientLLM(Flaky(99), Const(), CircuitBreaker(failure_threshold=1), attempts=2, base_delay_s=0.001)
+    assert await r.complete("s", "u") == "fallback"
+    assert await r.complete("s", "u") == "fallback"  # circuito abierto -> directo a fallback
+
+
+def test_formal_logic_validity_and_tables():
+    assert "VÁLIDO" in evaluate("P -> Q, P |- Q")  # modus ponens
+    assert "INVÁLIDO" in evaluate("P -> Q, Q |- P")  # afirmación del consecuente
+    assert "tautología" in evaluate("P | ~P")
+    assert "contradicción" in evaluate("P & ~P")
+    assert "VÁLIDO" in evaluate("P → Q, ¬Q ⊢ ¬P")  # modus tollens con símbolos
+
+
+async def test_formal_logic_tool_reports_syntax_errors():
+    assert (await FormalLogicCalculator().run("P ->")).startswith("Sintaxis inválida")
+
+
+ATOM = """<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>http://arxiv.org/abs/1</id>
+<title>Chaos in   three-body</title><published>2026-09-01T00:00:00Z</published>
+<summary>Resumen   largo</summary></entry></feed>"""
+
+
+async def test_public_api_tool_parses_arxiv_and_degrades_on_failure():
+    ok = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, text=ATOM)))
+    assert "Chaos in three-body" in await McpPublicApiTool(ArxivClient(ok)).run("three body")
+    bad = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+    out = await McpPublicApiTool(ArxivClient(bad)).run("x")
+    assert "no disponible" in out
+
+
+async def test_vector_memory_is_scoped_per_user():
+    store = InMemoryVectorStore()
+    await seed_global(store)
+    await store.add("ana", ["Q: ápeiron favorito\nA: mi secreto personal ana"])
+    tool = VectorMemoryRetriever(store)
+    request_ctx.set(RequestContext(user_id="ana"))
+    assert "secreto personal" in await tool.run("secreto personal ápeiron")
+    request_ctx.set(RequestContext(user_id="bob"))
+    assert "secreto personal" not in await tool.run("secreto personal ápeiron")
+    assert "ilimitado" in await tool.run("Anaximandro ápeiron ilimitado")
+
+
+def test_jwt_and_passwords():
+    ts = TokenService("s3cret" * 8, ttl_minutes=1)
+    assert ts.decode(ts.create("santiago")) == "santiago"
+    with pytest.raises(InvalidTokenError):
+        TokenService("otra" * 10).decode(ts.create("x"))
+    h = hash_password("clave-larga-123")
+    assert verify_password("clave-larga-123", h) and not verify_password("mala", h)
+
+
+async def test_langchain_adapter_with_stub_model(caplog):
+    class Msg:
+        content = [{"type": "text", "text": "hola"}]
+        usage_metadata = {"input_tokens": 3, "output_tokens": 1}
+
+    class Chat:
+        async def ainvoke(self, messages):
+            return Msg()
+
+    caplog.set_level("INFO", logger="apeiron.llm")
+    assert await LangChainLLM("m", "p", chat_model=Chat()).complete("s", "u") == "hola"
+    assert caplog.records[0].token_usage == {"input_tokens": 3, "output_tokens": 1}

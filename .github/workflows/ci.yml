@@ -1,0 +1,52 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.13", "3.14"]
+    # 3.14 es el objetivo (ADR-002): informativo hasta que el ecosistema madure.
+    continue-on-error: ${{ matrix.python == '3.14' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ matrix.python }}", allow-prereleases: true }
+      - run: pip install -e packages/core -e packages/infra -e services/api pytest pytest-asyncio ruff mypy import-linter
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Tipos (mypy strict)
+        run: mypy packages/core/src packages/infra/src services/api/src
+      - name: Contratos de arquitectura (import-linter)
+        run: lint-imports
+      - name: Tests (unit + integración del grafo y la API)
+        run: pytest -q
+
+  docker:
+    needs: backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build imagen API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/api.Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  web:
+    runs-on: ubuntu-latest
+    if: hashFiles('apps/web/package.json') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/web/package-lock.json }
+      - run: npm ci && npm run build -- --configuration production
+        working-directory: apps/web

@@ -1,0 +1,36 @@
+[importlinter]
+include_external_packages = True
+root_packages =
+    apeiron_core
+    apeiron_infra
+    apeiron_api
+
+[importlinter:contract:layers]
+name = Capas: api -> infra -> core (nunca al revés)
+type = layers
+layers =
+    apeiron_api
+    apeiron_infra
+    apeiron_core
+
+[importlinter:contract:core-is-vendor-free]
+name = El núcleo no importa web, HTTP, JWT, vector stores ni SDKs
+type = forbidden
+source_modules = apeiron_core
+forbidden_modules =
+    fastapi
+    httpx
+    jwt
+    bcrypt
+    chromadb
+    langchain
+    mcp
+    tenacity
+
+[importlinter:contract:domain-is-framework-free]
+name = El dominio no conoce LangGraph ni la orquestación
+type = forbidden
+source_modules = apeiron_core.domain
+forbidden_modules =
+    langgraph
+    apeiron_core.orchestration

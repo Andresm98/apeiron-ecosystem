@@ -1,11 +1,16 @@
 """Grafo Ápeiron (supervisor/worker).
 
     START -> apeiron_router -> <worker> -> apeiron_supervisor -> <worker> | apeiron_synthesis -> END
+                  └─ (entrada bloqueada) ───────────────────────────────────────┘
 
 Ápeiron es el orquestador: enruta (modo y participantes), supervisa cada turno decidiendo
 el siguiente orador o el cierre, y sintetiza. Cada worker es un nodo con nombre propio; si
 expone `graph`, su ciclo ReAct aparece como subgrafo en LangGraph Studio y en el stream.
 En debate los workers hablan por turnos: cada uno responde a la última posición del otro.
+
+Guardrails (ADR-011), si se configuran: el router valida la entrada, cada worker su turno
+(citas contra la evidencia real) y la síntesis la salida. Sin nodos extra: el contrato SSE
+y la topología visible no cambian.
 """
 
 import asyncio
@@ -17,8 +22,10 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from apeiron_core.application.agents.base import stream_emitter
+from apeiron_core.application.guardrails import BLOCKED_ANSWER, apply_guardrail
 from apeiron_core.application.orchestration.state import ApeironInput, ApeironState
 from apeiron_core.application.ports.outbound.agents import SpecialistAgent
+from apeiron_core.application.ports.outbound.guardrails import GuardrailPort
 from apeiron_core.application.ports.outbound.llm import LLMPort
 from apeiron_core.domain.entities.agent_turn import AgentTurn
 from apeiron_core.domain.services.routing import decide_agent, decide_mode
@@ -61,13 +68,19 @@ def _validate(
         )
 
 
-def _worker_node(name: str, agent: SpecialistAgent, node_timeout_s: float) -> Any:
+def _worker_node(
+    name: str,
+    agent: SpecialistAgent,
+    node_timeout_s: float,
+    guardrails: GuardrailPort | None = None,
+) -> Any:
     subgraph = getattr(agent, "graph", None)  # referencia directa: Studio lo detecta
 
     async def worker(state: ApeironState) -> dict[str, Any]:
         history = state.get("turns", [])
         started = time.perf_counter()
         degraded = False
+        out: dict[str, Any] = {}
         try:
             async with asyncio.timeout(node_timeout_s):
                 if subgraph is not None:
@@ -87,10 +100,25 @@ def _worker_node(name: str, agent: SpecialistAgent, node_timeout_s: float) -> An
         except TimeoutError:
             text = f"[{name} no respondió dentro de {node_timeout_s:.0f}s]"
             degraded = True
-        except Exception:
-            log.warning("agent_turn_failed", extra={"agent_name": name})
+        except Exception as exc:
+            log.warning("agent_turn_failed", extra={"agent_name": name, "error": type(exc).__name__})
             text = f"[{name}: turno degradado por un fallo del agente]"
             degraded = True
+        evidence: list[str] = list(out.get("evidence", []))
+        records = list(out.get("guardrails", []))
+        messages: list[str] = []
+        if not degraded:
+            # Citas contra la evidencia de toda la ejecución: la propia y la de turnos previos.
+            verdict, turn_records, messages = await apply_guardrail(
+                guardrails,
+                "turn",
+                text,
+                agent=name,
+                round_=state["round"],
+                evidence=[*state.get("evidence", []), *evidence],
+            )
+            text = verdict.text
+            records += turn_records
         log.info(
             "agent_turn",
             extra={
@@ -110,7 +138,12 @@ def _worker_node(name: str, agent: SpecialistAgent, node_timeout_s: float) -> An
             "degraded": degraded,
             "responds_to": interlocutor,
         }
-        return {"turns": [turn], "trace": [f"[{name} Thinking r{state['round']}]"]}
+        return {
+            "turns": [turn],
+            "trace": [f"[{name} Thinking r{state['round']}]", *messages],
+            "evidence": evidence,
+            "guardrails": records,
+        }
 
     return worker
 
@@ -121,34 +154,51 @@ def build_graph(
     default_rounds: int = 2,
     node_timeout_s: float = 60.0,
     debate_participants: Sequence[str] | None = None,
+    guardrails: GuardrailPort | None = None,
 ) -> Any:
     selected_participants = list(debate_participants or agents)
     _validate(agents, default_rounds, node_timeout_s, selected_participants)
     default_agent = next(iter(agents))
 
     async def apeiron_router(state: ApeironState) -> dict[str, Any]:
-        mode = state.get("mode") or decide_mode(state["question"])
+        verdict, records, messages = await apply_guardrail(
+            guardrails, "input", state["question"], agent="apeiron"
+        )
+        question = verdict.text or state["question"]
+        mode = state.get("mode") or decide_mode(question)
         participants = (
             selected_participants
             if mode == "debate"
-            else [decide_agent(state["question"], agents, default_agent)]
+            else [decide_agent(question, agents, default_agent)]
         )
         rounds = state.get("max_rounds")
         rounds = default_rounds if rounds is None else rounds
         if not 1 <= rounds <= 4:
             raise ValueError("max_rounds debe estar entre 1 y 4")
-        log.info(
-            "route",
-            extra={"agent_name": "apeiron", "state_transition": f"router->{mode}"},
-        )
-        return {
+        update: dict[str, Any] = {
             "mode": mode,
             "participants": participants,
             "round": 0,
             "speaker": 0,
             "max_rounds": rounds if mode == "debate" else 1,
-            "trace": ["[Ápeiron Routing]", f"[Ápeiron Delegating → {participants[0]} r0]"],
+            "guardrails": records,
         }
+        if verdict.action == "block":
+            log.info("route", extra={"agent_name": "apeiron", "state_transition": "router->blocked"})
+            return {**update, "blocked": True, "trace": ["[Ápeiron Routing]", *messages]}
+        log.info(
+            "route",
+            extra={"agent_name": "apeiron", "state_transition": f"router->{mode}"},
+        )
+        if verdict.action == "redact":
+            update["question"] = question  # los workers solo ven la pregunta saneada
+        return {
+            **update,
+            "trace": ["[Ápeiron Routing]", *messages, f"[Ápeiron Delegating → {participants[0]} r0]"],
+        }
+
+    def after_router(state: ApeironState) -> str:
+        return SYNTHESIS if state.get("blocked") else to_speaker(state)
 
     def to_speaker(state: ApeironState) -> str:
         return state["participants"][state["speaker"]]
@@ -167,14 +217,25 @@ def build_graph(
         return SYNTHESIS if state["round"] >= state["max_rounds"] else to_speaker(state)
 
     async def apeiron_synthesis(state: ApeironState) -> dict[str, Any]:
+        if state.get("blocked"):
+            return {"answer": BLOCKED_ANSWER, "trace": ["[Synthesis]"]}
+        answer, label = await compose(state)
+        verdict, records, messages = await apply_guardrail(
+            guardrails,
+            "output",
+            answer,
+            agent="apeiron",
+            round_=state["round"],
+            evidence=state.get("evidence", []),
+        )
+        return {"answer": verdict.text, "trace": [label, *messages], "guardrails": records}
+
+    async def compose(state: ApeironState) -> tuple[str, str]:
         turns = state["turns"]
         if state["mode"] == "single":
-            return {"answer": turns[0]["text"], "trace": ["[Response Generation]"]}
+            return turns[0]["text"], "[Response Generation]"
         if turns and all(t["degraded"] for t in turns):
-            return {
-                "answer": "Síntesis degradada; ningún especialista completó un turno.",
-                "trace": ["[Synthesis]"],
-            }
+            return "Síntesis degradada; ningún especialista completó un turno.", "[Synthesis]"
         transcript = "\n".join(
             f"r{turn['round']} {turn['agent']}: {turn['text']}" for turn in turns
         )
@@ -192,18 +253,18 @@ def build_graph(
                 answer = f"Síntesis degradada; turnos completados:\n{transcript}"
             else:
                 answer = "Síntesis degradada; ningún especialista completó un turno."
-        return {"answer": answer, "trace": ["[Synthesis]"]}
+        return answer, "[Synthesis]"
 
     workers = list(agents)
     graph = StateGraph(ApeironState, input_schema=ApeironInput)
     graph.add_node(ROUTER, apeiron_router)
     for name, agent in agents.items():
-        graph.add_node(name, _worker_node(name, agent, node_timeout_s))
+        graph.add_node(name, _worker_node(name, agent, node_timeout_s, guardrails))
         graph.add_edge(name, SUPERVISOR)
     graph.add_node(SUPERVISOR, apeiron_supervisor)
     graph.add_node(SYNTHESIS, apeiron_synthesis)
     graph.add_edge(START, ROUTER)
-    graph.add_conditional_edges(ROUTER, to_speaker, workers)
+    graph.add_conditional_edges(ROUTER, after_router, [*workers, SYNTHESIS])
     graph.add_conditional_edges(SUPERVISOR, after_supervisor, [*workers, SYNTHESIS])
     graph.add_edge(SYNTHESIS, END)
     return graph.compile(name="apeiron").with_config(recursion_limit=RECURSION_LIMIT)

@@ -82,3 +82,25 @@ async def test_persistence_failure_never_breaks_chat(user_ctx):
     facade = ApeironFacade(graph(), runs=MemoryRuns(fail=True))
     events = [e async for e in facade.stream("q", "single", None)]
     assert events[-1].data["answer"] == "respuesta breve"
+
+
+async def test_record_carries_channel_and_metrics_count_every_run():
+    token = request_ctx.set(replace(request_ctx.get(), user_id="u-1", channel="a2a", a2a_task_id="task-9"))
+    try:
+        runs = MemoryRuns()
+        facade = ApeironFacade(graph(), runs=runs)
+        await facade.ask("q", "single")
+        assert runs.saved[0]["channel"] == "a2a" and runs.saved[0]["a2a_task_id"] == "task-9"
+        snapshot = facade.metrics.snapshot()
+        assert snapshot["runs"] == 1 and snapshot["channels"] == {"a2a": 1} and snapshot["active_runs"] == 0
+    finally:
+        request_ctx.reset(token)
+
+
+async def test_metrics_work_without_a_repository_and_count_persist_failures(user_ctx):
+    facade = ApeironFacade(graph())
+    await facade.ask("q", "single")
+    assert facade.metrics.snapshot()["statuses"] == {"completed": 1}
+    failing = ApeironFacade(graph(), runs=MemoryRuns(fail=True))
+    await failing.ask("q", "single")
+    assert failing.metrics.snapshot()["failures"] == {"run_persist_failed": 1}

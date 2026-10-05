@@ -27,3 +27,20 @@ async def test_simulated_debate_cites_evidence_and_replies_to_interlocutor():
     assert "devenir" in heraclito and "Evidencia recuperada" in heraclito
     assert "Anaximandro sostuvo" in out["answer"] and "Heráclito sostuvo" in out["answer"]
     assert "difieren en el fundamento" in out["answer"]
+
+
+async def test_simulated_remote_stand_in_is_a_worker_not_the_moderator():
+    from apeiron_core.application.agents.factories import RemoteAgentFactory
+
+    store = InMemoryVectorStore()
+    await seed_global(store)
+    tools = {"vector_memory_retriever": VectorMemoryRetriever(store)}
+    registry = AgentRegistry()
+    registry.register(AnaximandroFactory())
+    registry.register(RemoteAgentFactory("sophos", "Socio remoto."))
+    llm = FakeLLM()
+    graph = build_graph(registry.build_all(llm, tools, max_steps=2), llm, 1)
+    out = await graph.ainvoke({"question": "Debate: ¿qué es el cambio?", "max_rounds": 1})
+    sophos = out["turns"][1]
+    assert sophos["agent"] == "sophos" and not sophos["degraded"]
+    assert "Respondo a Anaximandro" in sophos["text"] and "Síntesis" not in sophos["text"]

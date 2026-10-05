@@ -85,6 +85,10 @@ class InMemoryVectorStore:
         by_text = {item.text: item for item in pool}
         return [format_fragment(text, _source_of(by_text[text].user_id)) for text in overlap]
 
+    async def size(self) -> int:
+        """Documentos almacenados (sonda de salud del panel de sistema)."""
+        return sum(len(bucket) for bucket in self._docs.values())
+
     async def delete(self, user_id: str) -> None:
         if user_id == GLOBAL:
             return
@@ -164,6 +168,11 @@ class ChromaVectorStore:
             owner = (meta or {}).get("user_id", user_id)
             source_by_text.setdefault(doc, _source_of(str(owner)))
         return [format_fragment(text, source_by_text.get(text, "user")) for text in ranked]
+
+    async def size(self) -> int:
+        """Documentos de la colección; falla si Chroma no responde (sonda de salud)."""
+        count: int = await asyncio.to_thread(self._col.count)
+        return count
 
     async def delete(self, user_id: str) -> None:
         if user_id == GLOBAL:

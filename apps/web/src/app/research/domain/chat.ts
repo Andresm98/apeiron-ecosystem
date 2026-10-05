@@ -29,6 +29,15 @@ export interface AgentStep {
   auto?: boolean;
 }
 
+/** Intervención de un guardrail (ADR-011). Nunca incluye el texto evaluado. */
+export interface GuardEvent {
+  stage: 'input' | 'observation' | 'turn' | 'output';
+  action: 'redact' | 'block';
+  rules: string[];
+  agent: string;
+  round: number;
+}
+
 export interface Usage { calls: number; input_tokens: number; output_tokens: number; total_tokens: number; }
 
 /** Inicio/fin de un nodo LangGraph; los internos llevan ruta: `anaximandro/act`. */
@@ -39,5 +48,6 @@ export type ChatEvent =
   | { type: 'turn'; data: Turn }
   | { type: 'node'; data: NodeEvent }
   | { type: 'step'; data: AgentStep }
-  | { type: 'answer'; data: { answer: string; mode: Mode; simulate?: boolean; usage?: Usage } }
+  | { type: 'guard'; data: GuardEvent }
+  | { type: 'answer'; data: { answer: string; mode: Mode; simulate?: boolean; blocked?: boolean; usage?: Usage } }
   | { type: 'error'; data: { message: string; trace_id?: string } };

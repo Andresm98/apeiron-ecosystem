@@ -7,6 +7,9 @@ El esquema de Postgres se gestiona **solo con migraciones** de la Supabase CLI
 |---|---|
 | `20261004120000_agent_runs.sql` | `agent_runs`: ejecuciones por usuario, con RLS (select/insert/delete propios; sin UPDATE) |
 | `20261004130000_agent_registry.sql` | `agents` (catálogo de identidades, solo lectura para la app), `agent_executions` (agentes que actuaron en cada ejecución), columna `agent_runs.steps` y RPC `record_agent_run()` (escritura atómica con RLS) |
+| `20261005120000_run_guardrails.sql` | ADR-011: estado `blocked` en `agent_runs.status`, columna `agent_runs.guardrails` (veredictos sin texto) y `record_agent_run()` actualizada para guardarla |
+| `20261005130000_a2a_channel.sql` | ADR-011: `agent_runs.channel` (`web`/`a2a`) y `agent_runs.a2a_task_id`, `kind='remote'` en el catálogo `agents` y `record_agent_run()` con canal. Cada despliegue con workers remotos añade sus filas en `agents` con una migración propia |
+| `20261005140000_scholarly_tool.sql` | ADR-011: añade `scholarly_search` (MCP académico) a las herramientas de `anaximandro` y `heraclito` en el catálogo |
 
 ## Uso con el proyecto en la nube
 

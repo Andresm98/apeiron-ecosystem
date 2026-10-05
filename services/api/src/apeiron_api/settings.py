@@ -1,9 +1,23 @@
+import re
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEV_SECRET = "dev-insecure-secret-change-me-before-prod-0000"
+
+
+AGENT_ID = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
+TOKEN_ENV = re.compile(r"^APEIRON_A2A_TOKEN_[A-Z0-9_]+$")
+
+
+class RemoteAgentConfig(BaseModel):
+    """Worker remoto A2A (ADR-011): `token_env` nombra la variable con su credencial propia."""
+
+    name: str
+    url: str
+    role: str = "Worker remoto vía A2A."
+    token_env: str | None = None
 
 
 class Settings(BaseSettings):
@@ -49,6 +63,9 @@ class Settings(BaseSettings):
     tool_timeout_s: float = Field(default=20.0, gt=0, le=120)
     # Obliga a cada worker a usar al menos una tool antes de responder (+1 llamada LLM aprox.).
     require_evidence: bool = False
+    # Guardrails deterministas (ADR-011): inyección, secretos/PII, fuga del Thought y citas
+    # no respaldadas por la evidencia. 0 tokens; también se aplican en simulación.
+    guardrails_enabled: bool = True
     debate_participants: list[str] = Field(
         default_factory=lambda: ["anaximandro", "heraclito"], min_length=1, max_length=4
     )
@@ -59,7 +76,17 @@ class Settings(BaseSettings):
     memory_max_docs_per_user: int = Field(default=200, ge=1, le=10_000)
     memory_semantic_weight: float = Field(default=0.6, ge=0, le=1)
     memory_lexical_weight: float = Field(default=0.4, ge=0, le=1)
-    mcp_server_url: str | None = None
+    mcp_server_url: str | None = None  # legado: sustituye arXiv en mcp_public_api_tool
+    # Literatura académica con DOI vía el servidor MCP apeiron-scholar (OpenAlex). Vacío = sin la tool.
+    scholar_mcp_url: str | None = None
+
+    # A2A (ADR-011). Servidor: Agent Card pública + JSON-RPC con Bearer. Cliente: workers remotos.
+    a2a_server_enabled: bool = False
+    a2a_public_url: str = ""  # https://host público; vacío = la URL de la propia petición
+    a2a_remote_agents: list[RemoteAgentConfig] = Field(default_factory=list, max_length=4)
+    a2a_allowed_hosts: list[str] = Field(default_factory=list)
+    # Saltos de delegación A2A permitidos (A -> B cuenta 1). Corta bucles A -> B -> A.
+    a2a_max_hops: int = Field(default=1, ge=1, le=3)
 
     langsmith_enabled: bool = False
     langsmith_api_key: str | None = None
@@ -82,4 +109,12 @@ class Settings(BaseSettings):
             raise ValueError("APEIRON_JWT_SECRET es obligatorio en prod")
         if abs(self.memory_semantic_weight + self.memory_lexical_weight - 1.0) > 1e-6:
             raise ValueError("los pesos semántico y léxico deben sumar 1")
+        names = [agent.name for agent in self.a2a_remote_agents]
+        if len(set(names)) != len(names):
+            raise ValueError("APEIRON_A2A_REMOTE_AGENTS tiene nombres repetidos")
+        for agent in self.a2a_remote_agents:
+            if not AGENT_ID.match(agent.name) or agent.name.startswith("apeiron_"):
+                raise ValueError(f"nombre de agente remoto inválido o reservado: {agent.name!r}")
+            if agent.token_env and not TOKEN_ENV.match(agent.token_env):
+                raise ValueError("token_env debe llamarse APEIRON_A2A_TOKEN_<NOMBRE>")
         return self

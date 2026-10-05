@@ -51,8 +51,19 @@
     <g [attr.class]="'node worker status-' + status(wk.name)">
       <rect [attr.x]="wk.x" [attr.y]="y.worker" [attr.width]="wk.w" [attr.height]="y.workerH" rx="5" />
       <text [attr.x]="wk.cx" [attr.y]="y.worker + 17" class="node-title">{{ label(wk.name) }}</text>
-      <text [attr.x]="wk.cx" [attr.y]="y.worker + 30" class="node-sub">worker · ReAct</text>
+      <text [attr.x]="wk.cx" [attr.y]="y.worker + 30" class="node-sub">{{ wk.remote ? 'remoto · A2A' : 'worker · ReAct' }}</text>
 
+      @if (wk.remote) {
+        <g class="inner inner-remote">
+          <rect [attr.x]="wk.x + 8" [attr.y]="y.worker + 42" [attr.width]="wk.w - 16" height="26" rx="13" />
+          <text [attr.x]="wk.cx" [attr.y]="y.worker + 59" class="inner-label">tarea A2A</text>
+        </g>
+      } @else if (wk.compact) {
+        <g [attr.class]="'inner status-' + cycleStatus(wk.name)">
+          <rect [attr.x]="wk.x + 6" [attr.y]="y.worker + 42" [attr.width]="wk.w - 12" height="26" rx="13" />
+          <text [attr.x]="wk.cx" [attr.y]="y.worker + 59" class="inner-label">{{ wk.hasTools ? 'reason ⇄ act' : 'reason' }}</text>
+        </g>
+      } @else {
       <g [attr.class]="'inner status-' + status(wk.name + '/reason')">
         <rect [attr.x]="wk.x + 8" [attr.y]="y.worker + 42" [attr.width]="wk.hasTools ? wk.w / 2 - 12 : wk.w - 16" height="26" rx="13" />
         <text [attr.x]="wk.hasTools ? wk.x + 8 + (wk.w / 2 - 12) / 2 : wk.cx" [attr.y]="y.worker + 59" class="inner-label">reason</text>
@@ -64,8 +75,13 @@
           <text [attr.x]="wk.cx + 4 + (wk.w / 2 - 12) / 2" [attr.y]="y.worker + 59" class="inner-label">act · tool</text>
         </g>
       }
+      }
       <text [attr.x]="wk.cx" [attr.y]="y.worker + 88" class="counter">
-        turnos {{ visits(wk.name) }} · pasos {{ visits(wk.name + '/reason') }} · tools {{ visits(wk.name + '/act') }}
+        @if (wk.compact) {
+          {{ visits(wk.name) }} turno{{ visits(wk.name) === 1 ? '' : 's' }} · {{ visits(wk.name + '/act') }} tools
+        } @else {
+          turnos {{ visits(wk.name) }} · pasos {{ visits(wk.name + '/reason') }} · tools {{ visits(wk.name + '/act') }}
+        }
       </text>
     </g>
   }

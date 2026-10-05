@@ -14,7 +14,7 @@
 
 .edge {
   fill: none;
-  stroke: #c9d1ca;
+  stroke: var(--graph-edge);
   stroke-width: 1.4;
   transition: stroke 0.25s ease;
 }
@@ -35,12 +35,12 @@
 }
 
 .arrow-head {
-  fill: #8f9b93;
+  fill: var(--graph-muted);
 }
 
 .terminal {
   fill: var(--surface);
-  stroke: #8f9b93;
+  stroke: var(--graph-muted);
   stroke-width: 1.4;
 }
 
@@ -56,37 +56,37 @@
 }
 
 .orchestrator rect {
-  fill: #f1f4ef;
+  fill: var(--surface-soft);
   stroke: var(--forest);
 }
 
 .worker > rect {
   fill: var(--surface);
-  stroke: #9fb39a;
+  stroke: var(--graph-active);
 }
 
 .inner rect {
-  fill: #f4f6f1;
-  stroke: #c3cec4;
+  fill: var(--surface-soft);
+  stroke: var(--graph-idle);
 }
 
 .status-active > rect,
 .inner.status-active rect {
-  fill: #fbeee8;
+  fill: var(--danger-bg);
   stroke: var(--rust);
   stroke-width: 2;
 }
 
 .status-done > rect,
 .inner.status-done rect {
-  fill: #e9f0e3;
+  fill: var(--surface-moss);
   stroke: var(--moss-dark);
 }
 
 .status-error > rect,
 .inner.status-error rect {
-  fill: #fff0eb;
-  stroke: #8c382b;
+  fill: var(--danger-bg);
+  stroke: var(--danger-ink);
   stroke-dasharray: 3 2;
 }
 
@@ -166,4 +166,11 @@ text {
   .pulse {
     animation: none;
   }
+}
+
+/* Worker remoto (A2A): una tarea opaca en otro sistema, sin reason/act visibles. */
+.inner-remote rect {
+  fill: var(--surface-moss);
+  stroke: var(--moss-dark);
+  stroke-dasharray: 4 3;
 }

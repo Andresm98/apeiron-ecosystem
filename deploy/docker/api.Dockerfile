@@ -14,12 +14,14 @@ WORKDIR /src
 COPY packages/core packages/core
 COPY packages/infra packages/infra
 COPY services/api services/api
+COPY services/mcp-scholar services/mcp-scholar
 
 RUN pip install \
     --prefix=/install \
     ./packages/core \
     "./packages/infra[llm,chroma,mcp]" \
-    ./services/api
+    ./services/api \
+    ./services/mcp-scholar
 
 
 FROM python:${PYTHON_VERSION}-slim AS runtime
@@ -43,7 +45,8 @@ USER app
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+# start-period/interval: en el primer arranque Chroma descarga su modelo ONNX (~80 MB, decenas de s).
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 --start-period=120s --start-interval=2s \
     CMD python -c "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/healthz')" || exit 1
 
 CMD ["uvicorn", "apeiron_api.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

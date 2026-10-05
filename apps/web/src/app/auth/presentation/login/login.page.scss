@@ -17,11 +17,11 @@
   color: #eef1eb;
   background:
     radial-gradient(circle at 85% 15%, rgb(169 193 143 / 16%), transparent 45%),
-    var(--forest);
+    var(--brand-bg);
 }
 
 .brand .wordmark-symbol {
-  color: var(--forest);
+  color: var(--brand-bg);
   background: var(--moss);
 }
 
@@ -120,7 +120,7 @@
   grid-template-columns: 1fr 1fr;
   margin-bottom: 18px;
   padding: 3px;
-  background: #e3e8e2;
+  background: var(--surface-sunken);
   border-radius: 5px;
 }
 
@@ -137,8 +137,8 @@
 
 .tabs .tab-active {
   color: var(--forest);
-  background: #fff;
-  box-shadow: 0 1px 3px rgb(24 43 34 / 13%);
+  background: var(--surface);
+  box-shadow: 0 1px 3px var(--shadow);
 }
 
 .notice {
@@ -147,7 +147,7 @@
   border-left: 3px solid var(--moss-dark);
   color: var(--forest);
   font-size: 12px;
-  background: #e9f0e3;
+  background: var(--surface-moss);
 }
 
 .form {
@@ -172,7 +172,7 @@
   outline: none;
   color: var(--ink);
   font-size: 14px;
-  background: #fff;
+  background: var(--surface);
 }
 
 .field input:focus {
@@ -206,13 +206,13 @@
 }
 
 .reveal:hover {
-  background: #eef1eb;
+  background: var(--surface-sunken);
 }
 
 .form .form-error {
   padding: 9px 11px;
   font-size: 12px;
-  background: #fff0eb;
+  background: var(--danger-bg);
 }
 
 .submit {

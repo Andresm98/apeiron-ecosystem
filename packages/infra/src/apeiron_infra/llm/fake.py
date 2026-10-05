@@ -44,15 +44,20 @@ _TRANSCRIPT_RE = re.compile(r"^r\d+ (?P<agent>\w+): (?P<text>.+)$", re.M)
 _COMMAND_RE = re.compile(r"^\s*(debate|contrasta|compara)\s*:\s*", re.I)
 _SIM_RE = re.compile(r"\[simulación\]\s*")
 _CLAIM_PREFIX_RE = re.compile(r"^Sostengo que «[^»]*»\s*")
+_PERSONA_RE = re.compile(r"\beres ([a-z][a-z0-9_]+)")
 
 
 def _speaker(system: str) -> str:
     lowered = system.lower()
+    if "moderador" in lowered:
+        return "moderador"
     if "eres anaximandro" in lowered:
         return "anaximandro"
     if "eres heráclito" in lowered or "eres heraclito" in lowered:
         return "heraclito"
-    return "moderador"
+    # Cualquier otro worker (p. ej. el sustituto simulado de un agente A2A remoto).
+    persona = _PERSONA_RE.search(lowered)
+    return persona.group(1) if persona else "moderador"
 
 
 def _excerpt(text: str, limit: int = 110) -> str:

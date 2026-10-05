@@ -4,7 +4,7 @@
   max-width: 88%;
   padding: 12px 14px;
   border-left: 2px solid var(--line);
-  background: #f5f6f2;
+  background: var(--surface-soft);
 }
 
 :host(.reply) {
@@ -31,6 +31,19 @@
   font-size: 15px;
 }
 
+.remote-badge {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--moss-dark);
+  color: var(--forest);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+  background: var(--surface-moss);
+}
+
 .meta {
   align-self: center;
   color: var(--muted);
@@ -44,11 +57,11 @@
   margin: 0 0 10px;
   padding: 7px 10px;
   border-left: 3px solid var(--moss);
-  color: #4c5b53;
+  color: var(--ink-soft);
   font-size: 12px;
   font-style: italic;
   line-height: 1.5;
-  background: #eef2ea;
+  background: var(--surface-moss);
 }
 
 .label {
@@ -97,11 +110,11 @@
   gap: 3px;
   padding: 7px 9px;
   border: 1px solid var(--line-soft);
-  background: #fff;
+  background: var(--surface);
 }
 
 .evidence li.failed {
-  border-color: #e8b9ab;
+  border-color: var(--danger-line);
 }
 
 .call {
@@ -121,7 +134,7 @@
 }
 
 .obs {
-  color: #4c5b53;
+  color: var(--ink-soft);
   font-size: 12px;
   line-height: 1.5;
 }

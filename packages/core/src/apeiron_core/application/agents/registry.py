@@ -4,6 +4,7 @@ from collections.abc import Mapping
 
 from apeiron_core.application.agents.factories import AgentFactory
 from apeiron_core.application.ports.outbound.agents import SpecialistAgent
+from apeiron_core.application.ports.outbound.guardrails import GuardrailPort
 from apeiron_core.application.ports.outbound.llm import LLMPort
 from apeiron_core.application.ports.outbound.tools import ToolPort
 
@@ -19,7 +20,13 @@ class AgentRegistry:
 
     def describe(self) -> list[dict[str, object]]:
         return [
-            {"name": f.name, "role": f.role, "tools": list(f.tools)}
+            {
+                "name": f.name,
+                "role": f.role,
+                "tools": list(f.tools),
+                "kind": getattr(f, "kind", "local"),  # local (ReAct en proceso) | remote (A2A)
+                **({"endpoint": endpoint} if (endpoint := getattr(f, "endpoint", "")) else {}),
+            }
             for f in self._factories.values()
         ]
 
@@ -30,8 +37,11 @@ class AgentRegistry:
         max_steps: int = 4,
         tool_timeout_s: float = 20.0,
         require_evidence: bool = False,
+        guardrails: GuardrailPort | None = None,
     ) -> dict[str, SpecialistAgent]:
         return {
-            name: factory.create(llm, tools or {}, max_steps, tool_timeout_s, require_evidence)
+            name: factory.create(
+                llm, tools or {}, max_steps, tool_timeout_s, require_evidence, guardrails
+            )
             for name, factory in self._factories.items()
         }

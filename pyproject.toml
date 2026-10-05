@@ -1,12 +1,12 @@
 # Config de herramientas del monorepo (no es un paquete).
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["packages/core/tests", "packages/infra/tests", "services/api/tests"]
+testpaths = ["packages/core/tests", "packages/infra/tests", "services/api/tests", "services/mcp-scholar/tests"]
 
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-src = ["packages/core/src", "packages/infra/src", "services/api/src"]
+src = ["packages/core/src", "packages/infra/src", "services/api/src", "services/mcp-scholar/src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
@@ -20,4 +20,4 @@ strict = true
 python_version = "3.12"
 ignore_missing_imports = true
 explicit_package_bases = true
-mypy_path = ["packages/core/src", "packages/infra/src", "services/api/src"]
+mypy_path = ["packages/core/src", "packages/infra/src", "services/api/src", "services/mcp-scholar/src"]

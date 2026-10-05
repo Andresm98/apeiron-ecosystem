@@ -1,5 +1,8 @@
 <div class="heading">
-  <span class="name">{{ agentLabel(turn().agent) }}</span>
+  <span class="name">
+    {{ agentLabel(turn().agent) }}
+    @if (remote()) { <span class="remote-badge" title="Agente remoto vía protocolo A2A">A2A</span> }
+  </span>
   <span class="meta">
     RONDA {{ turn().round + 1 }} · {{ turn().responds_to ? 'RESPONDE A ' + agentLabel(turn().responds_to!).toUpperCase() : 'ABRE EL DEBATE' }}
   </span>
@@ -29,6 +32,8 @@
       }
     </ol>
   </details>
+} @else if (remote()) {
+  <p class="no-tools">Agente remoto (A2A): su razonamiento y sus herramientas viven en el otro sistema; Ápeiron verificó su turno con los guardrails.</p>
 } @else {
   <p class="no-tools">Sin herramientas: respondió solo con su razonamiento.</p>
 }

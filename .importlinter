@@ -4,6 +4,7 @@ root_packages =
     apeiron_core
     apeiron_infra
     apeiron_api
+    apeiron_mcp_scholar
 
 [importlinter:contract:layers]
 name = Capas: api -> infra -> core (nunca al revés)
@@ -42,5 +43,14 @@ name = Aplicación independiente de infraestructura y presentación
 type = forbidden
 source_modules = apeiron_core.application
 forbidden_modules =
+    apeiron_infra
+    apeiron_api
+
+[importlinter:contract:mcp-scholar-is-standalone]
+name = El servidor MCP apeiron-scholar es independiente (se comunica solo por MCP)
+type = forbidden
+source_modules = apeiron_mcp_scholar
+forbidden_modules =
+    apeiron_core
     apeiron_infra
     apeiron_api

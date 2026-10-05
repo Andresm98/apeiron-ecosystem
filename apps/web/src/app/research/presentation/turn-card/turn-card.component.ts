@@ -15,6 +15,8 @@ export class TurnCardComponent {
   readonly replied = input<Turn | null>(null);
   readonly evidence = input<AgentStep[]>([]);
   readonly reply = input(false);
+  /** Worker externo vía A2A: su evidencia vive en el otro agente. */
+  readonly remote = input(false);
 
   readonly agentLabel = agentLabel;
   readonly excerpt = excerpt;

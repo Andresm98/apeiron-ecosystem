@@ -38,9 +38,12 @@ class ExecutionCollector:
 
     mode: str = ""
     answer: str = ""
+    question: str = ""  # pregunta saneada por el guardrail de entrada, si la redactó
+    blocked: bool = False
     turns: list[dict[str, Any]] = field(default_factory=list)
     trace: list[str] = field(default_factory=list)
     steps: list[dict[str, Any]] = field(default_factory=list)
+    guardrails: list[dict[str, Any]] = field(default_factory=list)
     _agents: dict[str, _AgentStats] = field(default_factory=dict)
     _started: dict[str, float] = field(default_factory=dict)
 
@@ -69,6 +72,11 @@ class ExecutionCollector:
                         self._stats(turn["agent"]).degraded = True
                     yield ChatEvent("turn", turn)
                 self.answer = update.get("answer", self.answer)
+                self.question = update.get("question", self.question)
+                self.blocked = self.blocked or bool(update.get("blocked"))
+                for record in update.get("guardrails", []):
+                    self.guardrails.append(record)
+                    yield ChatEvent("guard", record)
 
     def agents(self) -> list[AgentExecution]:
         return [

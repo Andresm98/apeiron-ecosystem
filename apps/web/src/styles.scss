@@ -1,22 +1,99 @@
+/*
+ * Tipografía estilo Apple: SF Pro en macOS/iOS (system-ui) e Inter como equivalente en el resto.
+ * Temas: claro por defecto, oscuro según el sistema o forzado con [data-theme] (ThemeToggleComponent).
+ */
 :root {
   color-scheme: light;
   --ink: #1d2923;
+  --ink-soft: #4c5b53;
   --forest: #19362a;
+  --brand-bg: #19362a;
+  --on-brand: #eef1eb;
   --moss: #a9c18f;
   --moss-dark: #66804f;
   --rust: #bd5639;
+  --rust-hover: #a84731;
+  --accent-soft: #bb876b;
   --muted: #68766e;
   --paper: #eef1eb;
   --surface: #fff;
+  --surface-soft: #f5f6f2;
+  --surface-moss: #edf3e8;
+  --surface-sunken: #e8ece6;
   --line: #d8ded8;
   --line-soft: #e8ece7;
-  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
-  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-family: "Aptos", "Segoe UI", sans-serif;
+  --line-strong: #cfd7d0;
+  --line-input: #50645a;
+  --danger-bg: #fff0eb;
+  --danger-line: #e8b9ab;
+  --danger-ink: #8c382b;
+  --ok: #3f6b3a;
+  --warn: #9a6a12;
+  --graph-edge: #c9d1ca;
+  --graph-muted: #8f9b93;
+  --graph-active: #9fb39a;
+  --graph-idle: #c3cec4;
+  --shadow: rgb(24 43 34 / 13%);
+  --rule: rgb(25 54 42 / 2.5%);
+  --font-text: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-text);
+  font-feature-settings: "cv11", "ss01";
+  letter-spacing: -0.005em;
   color: var(--ink);
   background: var(--paper);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@mixin dark-theme {
+  color-scheme: dark;
+  --ink: #e4ebe5;
+  --ink-soft: #bccabf;
+  --forest: #cfe3c4;
+  --brand-bg: #12261d;
+  --on-brand: #eef1eb;
+  --moss: #a9c18f;
+  --moss-dark: #8fae74;
+  --rust: #e07a5c;
+  --rust-hover: #ea8d71;
+  --accent-soft: #d39a7c;
+  --muted: #95a39a;
+  --paper: #0f1713;
+  --surface: #17211c;
+  --surface-soft: #1b2621;
+  --surface-moss: #1f2f24;
+  --surface-sunken: #121b16;
+  --line: #2b3a32;
+  --line-soft: #223029;
+  --line-strong: #34453b;
+  --line-input: #4a5f53;
+  --danger-bg: #3a2019;
+  --danger-line: #7a3d2d;
+  --danger-ink: #f2a58d;
+  --ok: #8fc27f;
+  --warn: #e0b04f;
+  --graph-edge: #3a4a41;
+  --graph-muted: #6f7f75;
+  --graph-active: #6f9466;
+  --graph-idle: #3f5046;
+  --shadow: rgb(0 0 0 / 40%);
+  --rule: rgb(207 227 196 / 2.5%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    @include dark-theme;
+  }
+}
+
+:root[data-theme="dark"] {
+  @include dark-theme;
 }
 
 * {
@@ -37,7 +114,7 @@ body {
     0deg,
     transparent,
     transparent 34px,
-    rgb(25 54 42 / 2.5%) 35px
+    var(--rule) 35px
   );
 }
 
@@ -45,6 +122,12 @@ button,
 input,
 textarea {
   font: inherit;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.015em;
 }
 
 button:focus-visible,
@@ -88,10 +171,10 @@ textarea:focus-visible {
   height: 46px;
   display: grid;
   place-items: center;
-  color: var(--paper);
-  background: var(--forest);
+  color: var(--on-brand);
+  background: var(--brand-bg);
   border-radius: 50%;
-  font-family: Georgia, serif;
+  font-family: var(--font-display);
   font-size: 27px;
 }
 
@@ -116,6 +199,8 @@ textarea:focus-visible {
   color: var(--forest);
   font-family: var(--font-display);
   font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .status-dot {
@@ -127,7 +212,7 @@ textarea:focus-visible {
 }
 
 .status-dot-muted {
-  background: #aeb8b0;
+  background: var(--graph-muted);
 }
 
 .form-error {
@@ -153,7 +238,7 @@ textarea:focus-visible {
 }
 
 .primary-button:hover:not(:disabled) {
-  background: #a84731;
+  background: var(--rust-hover);
 }
 
 .primary-button:disabled {
@@ -167,12 +252,37 @@ textarea:focus-visible {
 }
 
 .quiet-button:hover:not(:disabled) {
-  background: rgb(255 255 255 / 12%);
+  background: var(--surface-sunken);
 }
 
 .quiet-button:disabled {
   opacity: 0.55;
   cursor: wait;
+}
+
+/* Navegación entre consola y observatorio. */
+.top-nav {
+  display: flex;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.top-nav a {
+  padding: 6px 10px;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.top-nav a:hover {
+  color: var(--forest);
+}
+
+.top-nav-active {
+  border-color: var(--moss-dark) !important;
+  color: var(--forest) !important;
 }
 
 .page-footer {
@@ -226,5 +336,12 @@ textarea:focus-visible {
 
   .page-footer {
     font-size: 8px;
+  }
+}
+
+@media (max-width: 720px) {
+  .top-nav {
+    order: 3;
+    width: 100%;
   }
 }

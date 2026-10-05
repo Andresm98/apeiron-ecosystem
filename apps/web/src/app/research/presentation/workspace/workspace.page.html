@@ -8,6 +8,11 @@
       </span>
     </a>
 
+    <nav class="top-nav" aria-label="Secciones">
+      <a routerLink="/" aria-current="page" class="top-nav-active">Consola</a>
+      <a routerLink="/sistema">Sistema</a>
+    </nav>
+
     <div class="session-indicator">
       <span class="status-dot" aria-hidden="true"></span>
       <span><strong>{{ session.username() }}</strong> · sesión activa</span>
@@ -41,10 +46,12 @@
               [attr.aria-pressed]="state.openedRunId() === run.id"
               (click)="openRun(run)"
             >
-              <span class="case-number" [class.run-error]="run.status === 'error'">{{ run.status === 'error' ? '!' : run.mode === 'debate' ? 'D' : 'C' }}</span>
+              <span class="case-number" [class.run-error]="run.status !== 'completed'" [attr.title]="runStatusLabel(run)">
+                {{ run.status === 'error' ? '!' : run.status === 'blocked' ? '⊘' : run.mode === 'debate' ? 'D' : 'C' }}
+              </span>
               <span class="case-title">{{ run.question }}</span>
               <span class="case-mode">
-                {{ runDate(run.created_at) }} · {{ run.simulate ? 'simulación' : (run.usage.total_tokens ?? 0) + ' tokens' }}
+                {{ runDate(run.created_at) }} · {{ run.simulate ? 'simulación' : (run.usage.total_tokens ?? 0) + ' tokens' }}{{ run.channel === 'a2a' ? ' · vía A2A' : '' }}{{ run.status === 'blocked' ? ' · bloqueada' : '' }}
               </span>
             </button>
           } @empty {
@@ -103,6 +110,7 @@
             [replied]="repliedTo($index)"
             [evidence]="stepsOfTurn(state.steps(), turn)"
             [reply]="$index % 2 === 1"
+            [remote]="isRemote(turn.agent)"
           />
         }
 
@@ -117,7 +125,15 @@
           <p class="working-state"><span class="status-dot"></span>Ápeiron está coordinando a los workers…</p>
         }
 
-        @if (state.answer() && state.turns().length > 1) {
+        @if (state.blocked() && state.answer()) {
+          <article class="final-answer blocked-answer" role="status">
+            <div class="turn-heading">
+              <span class="agent-name">⊘ Ápeiron rechazó la pregunta</span>
+              <span class="turn-round">GUARDRAIL DE ENTRADA</span>
+            </div>
+            <p>{{ state.answer() }}</p>
+          </article>
+        } @else if (state.answer() && state.turns().length > 1) {
           <article class="final-answer">
             <div class="turn-heading">
               <span class="agent-name">Síntesis de Ápeiron</span>
@@ -162,7 +178,7 @@
 
         <div class="prompt-footer">
           <span>
-            {{ mode === 'debate' ? 'Anaximandro ⇄ Heráclito · síntesis' : 'Ápeiron elige al worker' }} ·
+            {{ mode === 'debate' ? debateLabel() + ' · síntesis' : 'Ápeiron elige al worker' }} ·
             {{ simulate ? 'sin coste' : estimate() }}
           </span>
           @if (state.status() === 'running') {
@@ -209,6 +225,20 @@
         </p>
       }
 
+      @if (state.status() !== 'idle' || state.guards().length) {
+        <section class="guard-panel" aria-label="Guardrails de la ejecución">
+          <p class="guard-title">Guardrails · {{ state.guards().length }} {{ state.guards().length === 1 ? 'intervención' : 'intervenciones' }}</p>
+          @for (g of state.guards(); track $index) {
+            <p class="guard-item" [class.guard-block]="g.action === 'block'">
+              <span aria-hidden="true">{{ g.action === 'block' ? '⊘' : '✎' }}</span>
+              <strong>{{ g.agent === 'apeiron' ? 'Ápeiron' : agentLabel(g.agent) }}</strong> · {{ describeGuard(g) }}
+            </p>
+          } @empty {
+            <p class="guard-item guard-none">Sin intervenciones: entrada, evidencia y citas pasaron los controles.</p>
+          }
+        </section>
+      }
+
       <details class="trace-details" [open]="state.trace().length > 0 && state.trace().length < 14">
         <summary>Traza de eventos ({{ state.trace().length }})</summary>
         <ol class="trace-list">
@@ -232,6 +262,6 @@
 
   <footer class="page-footer">
     <span>Ápeiron Ecosystem</span>
-    <span>Orquestador · workers ReAct · LangGraph</span>
+    <span>Orquestador · workers ReAct · LangGraph · A2A</span>
   </footer>
 </div>

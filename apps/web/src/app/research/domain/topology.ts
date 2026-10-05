@@ -1,6 +1,13 @@
 import type { Mode } from './chat.ts';
 
-export interface AgentInfo { name: string; role: string; tools: string[]; }
+export interface AgentInfo {
+  name: string;
+  role: string;
+  tools: string[];
+  /** local: ReAct en proceso · remote: otro agente vía A2A (ADR-011). */
+  kind?: 'local' | 'remote';
+  endpoint?: string;
+}
 
 export interface Topology {
   orchestrator: string;

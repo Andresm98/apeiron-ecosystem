@@ -303,3 +303,34 @@ async def test_arxiv_search_uses_relevance_and_and_terms_with_fallback():
     assert seen[0].url.params["sortBy"] == "relevance"
     assert seen[0].url.params["search_query"].count(" AND ") == 3  # 4 términos
     assert seen[1].url.params["search_query"] == "all:Fermi AND all:paradox"  # fallback a 2
+
+
+class _Gateway:
+    def __init__(self, fail: bool = False) -> None:
+        self.calls: list[tuple[str, dict]] = []
+        self.fail = fail
+
+    async def call(self, tool: str, args: dict) -> str:
+        self.calls.append((tool, args))
+        if self.fail:
+            raise ConnectionError("mcp caído")
+        return "- Obra (2020) — Autora\n  doi:10.1/x · https://doi.org/10.1/x"
+
+
+async def test_scholarly_search_calls_the_mcp_tool_with_bounded_input():
+    from apeiron_infra.tools.scholarly import ScholarlySearchTool
+
+    gateway = _Gateway()
+    tool = ScholarlySearchTool(gateway, limit=3)
+    assert "doi:10.1/x" in await tool.run("  Anaximander\n apeiron  ")
+    assert gateway.calls == [("search", {"query": "Anaximander apeiron", "limit": 3})]
+    assert await tool.run("   ") == "Error: la consulta está vacía."
+
+
+async def test_scholarly_search_degrades_to_a_controlled_observation():
+    from apeiron_infra.resilience import CircuitBreaker
+    from apeiron_infra.tools.scholarly import UNAVAILABLE, ScholarlySearchTool
+
+    tool = ScholarlySearchTool(_Gateway(fail=True), CircuitBreaker(failure_threshold=1), timeout_s=1)
+    assert await tool.run("apeiron") == UNAVAILABLE
+    assert tool.breaker.state == "open"

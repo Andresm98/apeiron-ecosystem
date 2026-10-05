@@ -251,3 +251,20 @@ async def test_facade_stream_reports_inner_nodes_and_usage():
     answer = events[-1].data
     assert answer["answer"] == "válido"
     assert answer["usage"] == {"calls": 2, "input_tokens": 20, "output_tokens": 10, "total_tokens": 30}
+
+
+async def test_remote_agent_factory_uses_the_adapter_or_a_local_stand_in():
+    from apeiron_core.application.agents.factories import RemoteAgentFactory
+
+    remote = RespondingAgent()
+    reg = AgentRegistry()
+    reg.register(AnaximandroFactory())
+    reg.register(RemoteAgentFactory("sophos", "Socio remoto.", remote, endpoint="sophos.example.org"))
+    described = {a["name"]: a for a in reg.describe()}
+    assert described["anaximandro"]["kind"] == "local"
+    assert described["sophos"] == {
+        "name": "sophos", "role": "Socio remoto.", "tools": [], "kind": "remote", "endpoint": "sophos.example.org"
+    }
+    assert reg.build_all(StubLLM())["sophos"] is remote
+    stand_in = RemoteAgentFactory("sophos", "Socio remoto.").create(StubLLM(), {})
+    assert isinstance(stand_in, ReActAgent) and stand_in.name == "sophos"

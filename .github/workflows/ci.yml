@@ -41,13 +41,14 @@ jobs:
           -e packages/core
           -e "packages/infra[llm,chroma,mcp]"
           -e services/api
+          -e services/mcp-scholar
           pytest pytest-asyncio ruff mypy import-linter
 
       - name: Ruff
         run: ruff check .
 
       - name: Mypy
-        run: mypy packages/core/src packages/infra/src services/api/src
+        run: mypy packages/core/src packages/infra/src services/api/src services/mcp-scholar/src
 
       - name: Architecture contracts
         run: lint-imports

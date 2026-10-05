@@ -1,5 +1,6 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../auth/application/auth.service';
 import { SessionStore } from '../../../auth/application/session.store';
 import { ResearchStore } from '../../application/research.store';
@@ -10,10 +11,11 @@ import { AgentGraphComponent } from '../agent-graph/agent-graph.component';
 import { TurnCardComponent } from '../turn-card/turn-card.component';
 import { agentLabel } from '../agent-label';
 import { excerpt, pendingSteps, repliedTurn, stepsOfTurn } from '../../domain/dialogue';
+import { describeGuard } from '../../domain/guardrails';
 
 @Component({
   selector: 'app-workspace-page',
-  imports: [FormsModule, AgentGraphComponent, TurnCardComponent],
+  imports: [FormsModule, RouterLink, AgentGraphComponent, TurnCardComponent],
   templateUrl: './workspace.page.html',
   styleUrl: './workspace.page.scss',
 })
@@ -26,6 +28,7 @@ export class WorkspacePage implements OnInit {
   readonly submittedQuestion = signal('');
   readonly agentLabel = agentLabel;
   readonly excerpt = excerpt;
+  readonly describeGuard = describeGuard;
   readonly stepsOfTurn = stepsOfTurn;
   readonly repliedTo = (index: number) => repliedTurn(this.state.turns(), index);
   readonly liveSteps = computed(() => pendingSteps(this.state.steps(), this.state.turns()));
@@ -41,6 +44,22 @@ export class WorkspacePage implements OnInit {
   readonly agentNames = computed(
     () => this.state.topology()?.agents.map((a) => agentLabel(a.name)).join(' · ') ?? 'Anaximandro · Heráclito',
   );
+
+  readonly debateLabel = computed(
+    () => this.state.topology()?.debate_participants.map(agentLabel).join(' ⇄ ') ?? 'Anaximandro ⇄ Heráclito',
+  );
+  private readonly remoteAgents = computed(
+    () => new Set(this.state.topology()?.agents.filter((a) => a.kind === 'remote').map((a) => a.name) ?? []),
+  );
+
+  isRemote(agent: string): boolean {
+    return this.remoteAgents().has(agent);
+  }
+
+  runStatusLabel(run: RunSummary): string {
+    if (run.status === 'blocked') return 'Bloqueada por el guardrail de entrada';
+    return run.status === 'error' ? 'Con error' : 'Completada';
+  }
 
   ngOnInit(): void {
     void this.state.loadTopology();

@@ -2,6 +2,10 @@ import type { AuthAction } from '../domain/auth-error.ts';
 
 /** Traduce el status HTTP de /v1/auth/* a un mensaje para la persona usuaria. */
 export function describeAuthError(status: number, action: AuthAction): string {
+  // Sin configuración no se sabe si el acceso es por Supabase o local: no se adivina.
+  if (action === 'config' && (status === 0 || status >= 502)) {
+    return 'La API aún no responde (puede estar arrancando). Reintentando…';
+  }
   if (status === 0) return 'No hay conexión con la API. Comprueba que el backend está levantado.';
   if (status === 401) return 'Usuario o contraseña incorrectos.';
   if (status === 403) return 'El registro público está deshabilitado. Pide una cuenta a quien administra.';

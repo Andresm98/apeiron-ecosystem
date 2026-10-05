@@ -13,11 +13,11 @@
 
 .prompt-form textarea {
   width: 100%;
-  border: 1px solid #50645a;
+  border: 1px solid var(--line-input);
   border-radius: 3px;
   outline: none;
   color: var(--ink);
-  background: #fff;
+  background: var(--surface);
 }
 
 .prompt-form textarea:focus {
@@ -94,11 +94,11 @@
 }
 
 .case-choice:hover {
-  background: #f4f6f1;
+  background: var(--surface-soft);
 }
 
 .case-choice-active {
-  background: #edf3e8;
+  background: var(--surface-moss);
   box-shadow: inset 3px 0 0 var(--moss-dark);
 }
 
@@ -151,7 +151,7 @@
 .mode-switch {
   display: inline-flex;
   padding: 3px;
-  background: #edf0eb;
+  background: var(--surface-sunken);
   border: 1px solid var(--line);
   border-radius: 4px;
 }
@@ -169,8 +169,8 @@
 
 .mode-switch .mode-active {
   color: var(--forest);
-  background: #fff;
-  box-shadow: 0 1px 3px rgb(24 43 34 / 13%);
+  background: var(--surface);
+  box-shadow: 0 1px 3px var(--shadow);
 }
 
 .conversation {
@@ -192,7 +192,7 @@
 }
 
 .empty-mark {
-  color: #bb876b;
+  color: var(--accent-soft);
   font-family: var(--font-display);
   font-size: 44px;
 }
@@ -209,14 +209,14 @@
   max-width: 88%;
   padding: 12px 14px;
   border-left: 2px solid var(--line);
-  background: #f5f6f2;
+  background: var(--surface-soft);
 }
 
 .question-turn {
   align-self: flex-end;
   border-left: 0;
   border-right: 2px solid var(--rust);
-  background: #f9f3ee;
+  background: var(--danger-bg);
 }
 
 .turn-label {
@@ -239,7 +239,7 @@
 .final-answer {
   max-width: 100%;
   border-left-color: var(--moss-dark);
-  background: #eef3e9;
+  background: var(--surface-moss);
 }
 
 .turn-heading {
@@ -271,8 +271,8 @@
 
 .stream-error {
   padding: 9px 11px;
-  color: #8c382b;
-  background: #fff0eb;
+  color: var(--danger-ink);
+  background: var(--danger-bg);
 }
 
 .prompt-form {
@@ -389,7 +389,7 @@
   position: relative;
   width: 30px;
   height: 17px;
-  background: #cfd7d0;
+  background: var(--line-strong);
   border-radius: 9px;
   transition: background 0.2s ease;
 }
@@ -401,7 +401,7 @@
   width: 13px;
   height: 13px;
   content: "";
-  background: #fff;
+  background: var(--surface);
   border-radius: 50%;
   transition: transform 0.2s ease;
 }
@@ -437,7 +437,7 @@
   border: 1px solid var(--line);
   border-radius: 3px;
   font: inherit;
-  background: #fff;
+  background: var(--surface);
 }
 
 .usage {
@@ -494,7 +494,7 @@
   grid-template-columns: 1fr 1fr;
   margin-top: 12px;
   padding: 3px;
-  background: #edf0eb;
+  background: var(--surface-sunken);
   border: 1px solid var(--line);
   border-radius: 4px;
 }
@@ -511,12 +511,12 @@
 
 .left-tabs .left-tab-active {
   color: var(--forest);
-  background: #fff;
-  box-shadow: 0 1px 3px rgb(24 43 34 / 13%);
+  background: var(--surface);
+  box-shadow: 0 1px 3px var(--shadow);
 }
 
 .run-error {
-  color: #8c382b;
+  color: var(--danger-ink);
 }
 
 .history-empty {
@@ -596,4 +596,49 @@
     max-width: 100%;
   }
 
+}
+/* Rechazo del guardrail de entrada (ADR-011). */
+.blocked-answer {
+  border-color: var(--danger-line);
+  background: var(--danger-bg);
+}
+
+.blocked-answer .agent-name {
+  color: var(--rust);
+}
+
+/* Intervenciones de guardrails de la ejecución en curso o reabierta. */
+.guard-panel {
+  margin: 12px 18px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface-soft);
+}
+
+.guard-title {
+  margin: 0 0 6px;
+  color: var(--forest);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.guard-item {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.guard-item > span {
+  margin-right: 4px;
+}
+
+.guard-block {
+  color: var(--rust);
+}
+
+.guard-none {
+  color: var(--muted);
 }

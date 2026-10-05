@@ -1,4 +1,4 @@
-import type { AgentStep, ChatEvent, Turn, Usage } from '../domain/chat.ts';
+import type { AgentStep, ChatEvent, GuardEvent, Turn, Usage } from '../domain/chat.ts';
 import { type GraphRun, applyNodeEvent, emptyRun } from '../domain/graph-run.ts';
 import type { RunRecord } from '../domain/run-record.ts';
 
@@ -14,11 +14,15 @@ export interface RunState {
   error: string | null;
   graph: GraphRun;
   usage: Usage | null;
+  /** Intervenciones de guardrails (ADR-011) y si la entrada fue rechazada. */
+  guards: GuardEvent[];
+  blocked: boolean;
 }
 
 export function idleRun(): RunState {
   return {
     status: 'idle', trace: [], turns: [], steps: [], answer: '', error: null, graph: emptyRun(), usage: null,
+    guards: [], blocked: false,
   };
 }
 
@@ -36,10 +40,16 @@ export function reduceRunEvent(state: RunState, ev: ChatEvent): RunState {
       return { ...state, graph: applyNodeEvent(state.graph, ev.data) };
     case 'step':
       return { ...state, steps: [...state.steps, ev.data] };
+    case 'guard':
+      return { ...state, guards: [...state.guards, ev.data] };
     case 'answer':
-      return { ...state, status: 'done', answer: ev.data.answer, usage: ev.data.usage ?? null };
+      return {
+        ...state, status: 'done', answer: ev.data.answer, usage: ev.data.usage ?? null, blocked: !!ev.data.blocked,
+      };
     case 'error':
       return failRun(state, `Fallo interno del agente (trace ${ev.data.trace_id ?? '-'}).`);
+    default:
+      return state; // eventos futuros del contrato: se ignoran sin romper la consola
   }
 }
 
@@ -68,6 +78,8 @@ export function fromRecord(record: RunRecord): RunState {
     steps: record.steps ?? [],
     answer: record.answer,
     usage,
+    guards: record.guardrails ?? [],
+    blocked: record.status === 'blocked',
     error: record.status === 'error' ? `La ejecución falló (${record.error ?? 'error'}; trace ${record.trace_id}).` : null,
   };
 }

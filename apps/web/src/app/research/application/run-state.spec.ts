@@ -51,4 +51,23 @@ test('fromRecord reopens a persisted run without live graph', () => {
   const failed = fromRecord({ ...record, status: 'error', error: 'RuntimeError' });
   assert.equal(failed.status, 'error');
   assert.match(failed.error ?? '', /RuntimeError/);
+  const blocked = fromRecord({ ...record, status: 'blocked', answer: 'Ápeiron no procesó la pregunta' });
+  assert.equal(blocked.status, 'done'); // se reabre con su respuesta de rechazo, no como fallo
+  assert.equal(blocked.error, null);
+});
+
+test('guard events accumulate and a blocked answer is flagged', () => {
+  let state = startRun();
+  const guard = { stage: 'input', action: 'block', rules: ['prompt_injection'], agent: 'apeiron', round: 0 } as const;
+  state = reduceRunEvent(state, { type: 'guard', data: guard });
+  state = reduceRunEvent(state, { type: 'answer', data: { answer: 'rechazada', mode: 'single', blocked: true } });
+  assert.deepEqual(state.guards, [guard]);
+  assert.equal(state.blocked, true);
+  assert.equal(state.status, 'done');
+});
+
+test('unknown events from a newer API are ignored', () => {
+  const state = startRun();
+  const next = reduceRunEvent(state, { type: 'future', data: {} } as unknown as Parameters<typeof reduceRunEvent>[1]);
+  assert.equal(next, state);
 });

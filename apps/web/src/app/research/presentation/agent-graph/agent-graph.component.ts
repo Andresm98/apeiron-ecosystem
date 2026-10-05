@@ -21,6 +21,9 @@ interface WorkerBox {
   w: number;
   cx: number;
   hasTools: boolean;
+  remote: boolean;
+  /** Caja estrecha (3–4 workers): un solo óvalo reason ⇄ act y contador corto. */
+  compact: boolean;
 }
 
 /** Grafo Ápeiron en vivo: orquestador (router, supervisor, síntesis) y workers ReAct. */
@@ -46,7 +49,7 @@ export class AgentGraphComponent {
     const w = (W - MARGIN * 2 - GAP * (n - 1)) / n;
     return agents.map((a, i) => {
       const x = MARGIN + i * (w + GAP);
-      return { name: a.name, role: a.role, x, w, cx: x + w / 2, hasTools: a.tools.length > 0 };
+      return { name: a.name, role: a.role, x, w, cx: x + w / 2, hasTools: a.tools.length > 0, remote: a.kind === 'remote', compact: w < 120 };
     });
   });
 
@@ -58,6 +61,12 @@ export class AgentGraphComponent {
 
   status(node: string): NodeStatus {
     return this.run().status[node] ?? 'idle';
+  }
+
+  /** Estado del ciclo ReAct en modo compacto: act si está activo, si no reason. */
+  cycleStatus(worker: string): NodeStatus {
+    const act = this.status(`${worker}/act`);
+    return act === 'active' ? act : this.status(`${worker}/reason`);
   }
 
   visits(node: string): number {

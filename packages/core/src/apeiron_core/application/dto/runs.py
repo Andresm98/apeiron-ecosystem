@@ -2,7 +2,7 @@
 
 from typing import Any, Literal, TypedDict
 
-RunStatus = Literal["completed", "error"]
+RunStatus = Literal["completed", "blocked", "error"]
 
 
 class AgentExecution(TypedDict):
@@ -20,6 +20,8 @@ class AgentExecution(TypedDict):
 class AgentRun(TypedDict):
     user_id: str
     trace_id: str
+    channel: str  # web | a2a
+    a2a_task_id: str | None
     question: str
     mode: str
     simulate: bool
@@ -28,6 +30,7 @@ class AgentRun(TypedDict):
     turns: list[dict[str, Any]]
     trace: list[str]
     steps: list[dict[str, Any]]  # evidencia ReAct pública (tool, entrada, observación)
+    guardrails: list[dict[str, Any]]  # veredictos no triviales (etapa, acción, reglas); sin texto
     agents: list[AgentExecution]
     usage: dict[str, int]
     model: str

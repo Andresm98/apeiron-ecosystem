@@ -26,6 +26,8 @@ export class ResearchStore {
   readonly error = computed(() => this.run$().error);
   readonly graph = computed(() => this.run$().graph);
   readonly usage = computed(() => this.run$().usage);
+  readonly guards = computed(() => this.run$().guards);
+  readonly blocked = computed(() => this.run$().blocked);
 
   readonly simulated = signal(false);
   readonly elapsedMs = signal(0);

@@ -12,10 +12,11 @@ Plataforma multiagente de razonamiento filosófico-científico:
 
 - **Ápeiron**: el orquestador. Es un grafo LangGraph que enruta la pregunta (`single` o `debate`), supervisa los turnos y sintetiza.
 - **Workers ReAct**: `anaximandro` y `heraclito`. Cada uno es un subgrafo LangGraph `reason ⇄ act` que llama a un LLM y a herramientas.
-- **Herramientas**: `formal_logic_calculator` (lógica proposicional propia), `mcp_public_api_tool` (servidor MCP o arXiv) y `vector_memory_retriever` (Chroma con rerank híbrido BM25).
+- **Herramientas**: `formal_logic_calculator` (lógica proposicional propia), `scholarly_search` (literatura con DOI vía el servidor MCP propio `apeiron-scholar` → OpenAlex), `mcp_public_api_tool` (arXiv) y `vector_memory_retriever` (Chroma con rerank híbrido BM25).
 - **Simulación a 0 tokens**: `FakeLLM` determinista recorre el grafo completo con evidencia real de la memoria. Es la forma por defecto de probar cualquier cambio.
 - **Identidad e historial**: Supabase Auth (JWT verificado por JWKS) y Postgres con RLS (`agent_runs`, `agents`, `agent_executions`). Hay un modo `local` alternativo (SQLite y JWT HS256) sin historial.
-- **Observabilidad**: logs JSON con `trace_id`/`user_id`, trazas en LangSmith y uso de tokens por ejecución.
+- **Observabilidad**: logs JSON con `trace_id`/`user_id`, trazas en LangSmith, uso de tokens por ejecución y el observatorio `/v1/system` + `/sistema` (salud de componentes, actividad del proceso, A2A y límites).
+- **A2A 1.0 y guardrails** (ADR-011): Ápeiron es servidor A2A (`/a2a`, Agent Card) y puede sumar workers remotos A2A al debate. Los guardrails deterministas protegen la entrada, las observaciones, los turnos y la síntesis.
 - **Entrega**: Docker Compose (api, chroma, web/Nginx, studio) y GitHub Actions → GHCR → EC2 por SSH.
 
 ## 2. Stack y versiones
@@ -44,7 +45,9 @@ packages/core/src/apeiron_core/            # NÚCLEO (sin SDKs de proveedor)
   domain/
     entities/agent_turn.py                 # AgentTurn TypedDict: agent, round, text, degraded, responds_to
     value_objects/mode.py                  # Mode = Literal["single", "debate"]
+    value_objects/guardrail.py             # GuardrailVerdict (allow|redact|block), GuardrailRecord (sin texto)
     services/routing.py                    # decide_mode (DEBATE_HINTS), decide_agent (AGENT_HINTS por agente)
+    services/guardrails.py                 # políticas deterministas: inyección, secretos/PII, protocolo, citas
   application/
     agents/base.py                         # dialogue_block (última posición de cada interlocutor), stream_emitter, emit_step
     agents/react.py                        # ReActAgent: subgrafo reason⇄act, regex Action/Final Answer, política de evidencia
@@ -55,27 +58,31 @@ packages/core/src/apeiron_core/            # NÚCLEO (sin SDKs de proveedor)
     use_cases/chat.py                      # ApeironFacade: ask / stream, memoriza, registra la ejecución
     use_cases/execution.py                 # ExecutionCollector: stream LangGraph → ChatEvent + AgentExecution
     ports/inbound/chat.py                  # ChatUseCasePort
-    ports/outbound/{llm,tools,memory,runs,agents,events}.py
+    ports/outbound/{llm,tools,memory,runs,agents,events,guardrails}.py
+    guardrails.py                          # RuleGuardrails por etapa + apply_guardrail (política de fallo, traza)
     dto/{chat,runs}.py                     # ChatEvent, AgentRun, AgentExecution
-    context.py                             # RequestContext (user_id, session_id, trace_id, access_token oculto) en ContextVar
+    context.py                             # RequestContext (user_id, session_id, trace_id, channel, a2a_task_id, a2a_hops, access_token oculto)
+    metrics.py                             # RuntimeMetrics: agregados en memoria por instancia (estados, canales, guardrails, latencia)
     usage.py                               # TokenUsage + usage_meter (ContextVar) + record_usage()
 packages/infra/src/apeiron_infra/          # ADAPTADORES DE SALIDA
   llm/{langchain_llm,resilient,fake}.py
   memory/{vector,hybrid}.py                # ChromaVectorStore, InMemoryVectorStore, PRESOCRATIC_SEED, bm25 + hybrid_rerank
-  tools/{formal_logic,public_api,vector_memory}.py
+  tools/{formal_logic,public_api,scholarly,vector_memory}.py
   security/{supabase,tokens,users,rate_limit}.py
   persistence/supabase_runs.py             # SupabaseRunRepository (PostgREST + RPC, JWT delegado)
   resilience/{circuit_breaker,policies}.py
   observability/{logging,langsmith}.py
 services/api/src/apeiron_api/              # ADAPTADOR DE ENTRADA + COMPOSITION ROOT
   main.py (create_app, middleware trace_id) · deps.py (current_user, rate limits) · settings.py
-  routes/{auth,chat,memory,runs}.py · schemas.py · container.py · studio.py
+  routes/{auth,chat,memory,runs,system,a2a}.py · schemas.py · container.py · studio.py
+  a2a/{card,tasks}.py                      # Agent Card y A2ATaskStore + run_task (ChatEvent -> eventos A2A)
+services/mcp-scholar/src/apeiron_mcp_scholar/  # servidor MCP OpenAlex (independiente: no importa apeiron_*)
 apps/web/src/app/                          # Angular: <contexto>/{domain,application,infrastructure,presentation}
-  auth/ · research/ · shared/ · app.{ts,config.ts,routes.ts} · architecture.spec.ts
+  auth/ · research/ · observatory/ (/sistema) · shared/ · app.{ts,config.ts,routes.ts} · architecture.spec.ts
 supabase/{config.toml,migrations/,README.md}
 deploy/{docker/,nginx/,scripts/{deploy-ec2.sh,render_env.py,smoke_e2e.py},tests/,docker-compose.yml}
 .github/workflows/{ci.yml,deploy-ec2.yml}
-docs/{adr/0001…0010,DEPLOY.md}
+docs/{adr/0001…0011,DEPLOY.md}
 langgraph.json · Makefile · .importlinter · pyproject.toml (config de herramientas, no es un paquete)
 ```
 
@@ -149,8 +156,41 @@ Angular (SseChatStreamAdapter, fetch POST + Bearer)
 - Retención: `APEIRON_MEMORY_MAX_DOCS_PER_USER` (200) se aplica por `created_at`. `PRESOCRATIC_SEED` se siembra al arrancar. El cliente es síncrono y se aísla con `asyncio.to_thread`.
 - `InMemoryVectorStore` es el double que se usa en desarrollo y tests (`APEIRON_VECTOR_BACKEND=memory`).
 
+### Guardrails (ADR-011)
+- `GuardrailPort.check(stage, text, evidence)` con etapas `input` (router), `observation` (`ReActAgent._act`), `turn` (nodo del worker) y `output` (síntesis). No hay nodos extra: el SSE y el SVG no cambian.
+- `RuleGuardrails` (núcleo, 0 tokens, activo con `APEIRON_GUARDRAILS_ENABLED=true`, también en simulación):
+  - `input`: bloquea la inyección directa y la suplantación de rol. Una pregunta bloqueada llega a la síntesis con `BLOCKED_ANSWER`, se guarda con `status='blocked'` y no se memoriza.
+  - `observation`: neutraliza la inyección indirecta.
+  - En todas las etapas redacta secretos y PII. En `input` solo secretos.
+  - `turn` y `output`: remedian citas (URL, arXiv o DOI) que no estén en `evidence`, que son las observaciones reales acumuladas en `WorkerState`/`ApeironState`.
+- Política de fallo: `input` falla cerrado (`guardrail_unavailable`); el resto falla abierto con `guardrail_failed`. Los registros (`GuardrailRecord`) y los logs nunca llevan el texto.
+- Un patrón nuevo va en `domain/services/guardrails.py` con casos positivos **y** negativos en `test_guardrails.py`. Una pregunta filosófica legítima no puede bloquearse.
+
+### A2A 1.0 (ADR-011, fases 2 y 3)
+- **Implementación propia** del binding JSON-RPC (sin `a2a-sdk`, que en 1.x arrastra protobuf y google-api-core): `apeiron_infra/a2a/wire.py` es la única fuente del formato (proto3 JSON camelCase, `TASK_STATE_*`, `ROLE_*`, respuestas `{task}|{statusUpdate}|{artifactUpdate}`). Al cambiar algo, revalidar contra los protobuf del SDK (ver ADR-011).
+- **Servidor** (`routes/a2a.py`, desactivado por defecto):
+  - La card es pública; `/a2a` usa el mismo Bearer y rate limit que el chat.
+  - Cada tarea corre en una `asyncio.Task` con **contexto limpio** (`contextvars.Context()` + `request_ctx` con `channel="a2a"`, `a2a_task_id` y `a2a_hops`) y sobrevive a la desconexión del cliente.
+  - El `A2ATaskStore` vive en memoria y está acotado. Una tarea ajena es `TaskNotFound`.
+- **Cliente** (`A2ARemoteAgent`):
+  - Credencial propia por agente (`token_env`), nunca el JWT del usuario.
+  - Allowlist y `https` (salvo localhost), validadas también sobre la URL que anuncia la card.
+  - Breaker por agente y respuesta acotada.
+  - `metadata.apeironHops` y `APEIRON_A2A_MAX_HOPS` cortan bucles de delegación.
+  - En simulación, `RemoteAgentFactory` sin adaptador crea un ReAct local del mismo nombre.
+
+### Observatorio (`GET /v1/system`)
+- Lo construye `routes/system.py` desde el `Container`: breakers con nombre (`llm`, `external_sources`, uno por remoto), sondas (`probes["memory"]` = `store.size()` con timeout de 2 s), `RuntimeMetrics.snapshot()`, `A2ATaskStore` (conteos y tareas **propias**) y el cupo `SlidingWindowLimiter.remaining`.
+- Solo agregados del proceso y datos del propio usuario: nunca preguntas ajenas, secretos ni detalles de error.
+- Un componente nuevo con estado (otra dependencia externa) debe aparecer aquí con `ok|degraded|down|disabled|simulated`.
+
+### MCP académico (`apeiron-scholar`)
+- Servidor propio (`services/mcp-scholar`, SDK MCP **2.x** `MCPServer`, streamable HTTP sin estado): herramienta `search(query, limit 1–5)` → obras de OpenAlex con **DOI literal**. Viaja en la imagen de la API (`python -m apeiron_mcp_scholar`), servicio `mcp-scholar` de Compose sin puerto publicado, protección DNS rebinding (`APEIRON_SCHOLAR_ALLOWED_HOSTS`).
+- Cliente: `ScholarlySearchTool` (`scholarly_search`) sobre `McpSdkGateway` + breaker `scholarly_sources`; activo si `APEIRON_SCHOLAR_MCP_URL`. La descripción que ve el LLM es la nuestra (nunca la del servidor: anti *tool poisoning*).
+- Tests por el protocolo MCP real en proceso (`httpx2.ASGITransport` + `app.router.lifespan_context`), sin red.
+
 ### MCP y arXiv
-- `McpPublicApiTool`: si existe `APEIRON_MCP_SERVER_URL`, usa `McpSdkGateway` (streamable HTTP, herramienta `search` con `{"query": ...}`). Si no, usa `ArxivClient` (`all:a AND all:b…`, ordenado por relevancia, reintenta con 2 términos).
+- `McpPublicApiTool`: si existe el legado `APEIRON_MCP_SERVER_URL`, usa `McpSdkGateway` (streamable HTTP, herramienta `search` con `{"query": ...}`) en lugar de arXiv. Si no, usa `ArxivClient` (`all:a AND all:b…`, ordenado por relevancia, reintenta con 2 términos).
 - Usa `CircuitBreaker` y `call_with_retry(attempts=2, timeout_s=15)`. Si falla, devuelve como observación el texto *"Fuente externa no disponible…"* y el agente continúa.
 
 ## 7. Contrato público
@@ -166,6 +206,9 @@ Angular (SseChatStreamAdapter, fetch POST + Bearer)
 | POST | `/v1/chat`, `/v1/chat/stream` | Body `{question ≤4000, mode?, max_rounds? 1–4, simulate?}`; rate limit por usuario |
 | DELETE | `/v1/memory` | Borra la memoria del usuario (204) |
 | GET | `/v1/runs?limit=1..100`, `/v1/runs/{uuid}` | 404 sin Supabase, 502 si Supabase falla |
+| GET | `/v1/system` | Observatorio: `service`, `components[]`, `activity`, `a2a{server_enabled, card_url, tasks, my_tasks}`, `limits` |
+| GET | `/.well-known/agent-card.json` | Pública; 404 si `APEIRON_A2A_SERVER_ENABLED=false` |
+| POST | `/a2a` | JSON-RPC A2A 1.0 (`SendMessage`, `SendStreamingMessage`, `GetTask`, `CancelTask`); cabecera `A2A-Version` 1.x |
 
 **SSE** (`/v1/chat/stream`):
 
@@ -175,7 +218,8 @@ Angular (SseChatStreamAdapter, fetch POST + Bearer)
 | `trace` | `{messages: string[]}` |
 | `step` | `{agent, round, step, tool, input≤200, observation≤480, error, auto}` |
 | `turn` | `{agent, round, text, degraded, responds_to}` |
-| `answer` | `{answer, mode, simulate, usage: {calls, input_tokens, output_tokens, total_tokens}}` |
+| `guard` | `{stage: input\|observation\|turn\|output, action: redact\|block, rules, agent, round}` (sin texto) |
+| `answer` | `{answer, mode, simulate, blocked, usage: {calls, input_tokens, output_tokens, total_tokens}}` |
 | `error` | `{message: "internal_error", trace_id}` (lo emite la ruta, no `ChatEvent`) |
 
 ## 8. Recetas de extensión (todos los puntos que hay que tocar)
@@ -189,6 +233,13 @@ Angular (SseChatStreamAdapter, fetch POST + Bearer)
 6. **web**: `agentLabel` en `research/presentation/agent-label.ts`. Revisar `DEFAULT_AGENTS` (`domain/topology.ts`) y la disposición del SVG en `agent-graph`.
 7. **tests**: topología (`describe()`, `/v1/agents`), orden de turnos, simulación sin tokens y routing de dominio.
 8. **docs**: tablas de workers en el README y, si cambia la topología, un ADR.
+
+### Nuevo worker remoto (A2A)
+1. `APEIRON_A2A_REMOTE_AGENTS` con `{name, url, role, token_env}`, el host en `APEIRON_A2A_ALLOWED_HOSTS` y el secret `APEIRON_A2A_TOKEN_<NOMBRE>` en el `.env` de la VM (`docs/DEPLOY.md`).
+2. Si debe debatir, añadirlo a `APEIRON_DEBATE_PARTICIPANTS`.
+3. **supabase**: migración que inserte su fila en `public.agents` con `kind='remote'`.
+4. **web**: `agentLabel` si el nombre lleva tilde. El grafo y las tarjetas lo marcan como A2A a partir de `kind`.
+5. No hace falta código: el composition root construye el `A2ARemoteAgent` y la simulación usa el sustituto local.
 
 ### Nueva herramienta
 1. Clase en `infra/tools/` con `name`, `description` (con instrucciones de entrada para el LLM) y `async run(tool_input: str) -> str`. Debe devolver errores como texto controlado y nunca usar `eval`.
@@ -239,13 +290,17 @@ npx supabase migration new <nombre> | migration list | db push              # SO
 | `packages/core/tests/test_core.py` | Routing, topología, subgrafos, turnos, ReAct, degradación, eventos de nodo y uso de tokens |
 | `packages/core/tests/test_agentic.py` | Evidencia por paso, interlocutor (`responds_to`) y métricas por agente |
 | `packages/core/tests/test_eval.py` | Evals deterministas: uso de herramientas, citas, fidelidad de síntesis y sin inventar evidencia |
+| `packages/core/tests/test_guardrails.py` | Guardrails: inyección directa e indirecta, falsos positivos, secretos/PII, fuga del Thought, citas, política de fallo, ejecución bloqueada |
 | `packages/core/tests/test_runs.py` | Registro de ejecuciones (completadas, con error, simulación) y aislamiento de fallos |
 | `packages/infra/tests/test_infra.py` | Retry/timeout, breaker (incluido el half-open concurrente), fallback LLM, adaptador LangChain con stub, lógica formal, arXiv, memoria por usuario, Chroma (cliente simulado), JWT, SQLite y JsonFormatter |
 | `packages/infra/tests/test_simulation.py` | `FakeLLM` y simulación |
 | `packages/infra/tests/test_supabase.py` | Verificador (HS256/ES256) y repositorio (cabeceras, filtros, RPC) |
 | `services/api/tests/test_api.py`, `test_supabase_api.py` | Contrato REST/SSE, límites, simulación sin tokens, `/v1/runs`, config |
+| `services/api/tests/test_a2a_api.py` | Servidor A2A (card, JSON-RPC, streaming, errores, dueño, cancelación), `/v1/system`, Ápeiron ⇄ Ápeiron por A2A y corte de bucles |
+| `services/mcp-scholar/tests/test_scholar.py` | Servidor MCP: formato OpenAlex con DOI, límites, protocolo MCP real en proceso, errores controlados, DNS rebinding |
+| `packages/infra/tests/test_a2a_client.py` | Cliente A2A: SSRF/https, credencial propia, streaming y SendMessage, breaker, límite de saltos |
 | `deploy/tests/test_render_env.py` | Plantilla `.env` y validaciones de producción |
-| `apps/web/src/app/**/*.spec.ts` | Parser SSE, reducers, graph-run, dialogue, sanitizer, auth y capas |
+| `apps/web/src/app/**/*.spec.ts` | Parser SSE, reducers (incl. `guard` y eventos desconocidos), graph-run, dialogue, sanitizer, auth, guardrails, observatorio y capas |
 
 Los doubles se escriben a mano (clases con `complete`/`run`). Nunca se llama a LLMs ni a la red reales.
 
@@ -256,10 +311,12 @@ Datos para planificar. Verificar contra el código antes de actuar.
 - **CI no ejecuta `npm test`** (solo `npm ci` + build). Las reglas de capas del frontend no bloquean un PR.
 - **ADRs desactualizados**: ADR-001 (habla de un `app.ts` único), ADR-003 (`Send`/`round_gate`, reemplazado por 009), ADR-005 (token solo en memoria, reemplazado por 010) y una contradicción entre ADR-006 y ADR-007 sobre CRLF en SSE: `parseFrame` normaliza `\r\n`, pero `SseChatStreamAdapter` separa los frames con `\n\n`, así que un servidor que use `\r\n\r\n` no se partiría bien.
 - **Pendientes declarados**: CSP en Nginx y retención/borrado de historial desde la UI (ADR-010); checkpointer persistente y síntesis que cite la evidencia (ADR-009); TLS real y backups probados de `chroma-data`/`api-data` (ADR-008).
-- **Escala horizontal**: `SlidingWindowLimiter` vive en memoria y aplica por instancia. Hace falta un adaptador compartido antes de tener más de una réplica.
+- **Escala horizontal**: `SlidingWindowLimiter`, `A2ATaskStore` y `RuntimeMetrics` viven en memoria y aplican por instancia. Hace falta un adaptador compartido antes de tener más de una réplica.
+- **A2A pendiente**: notificaciones push, `SubscribeToTask`, `ListTasks`, `input-required`, continuar tareas por `taskId`, firma de la card y un test automático contra `a2a-sdk` (hoy la validación se hizo a mano; ADR-011).
 - **Puntos de acoplamiento por nombre de agente**: `AGENT_HINTS` (dominio), `STANCES`/`_speaker` (`FakeLLM`), `agentLabel` y `DEFAULT_AGENTS` (web) y las personas del catálogo SQL. Se pueden mover a datos declarados por la fábrica o la topología.
 - **Candidatos de producto** ya previstos: nuevos workers (Sócrates, Anaxágoras), migrar la memoria a pgvector (fuera de alcance según ADR-010), Markdown/KaTeX en la UI y pruebas de navegador.
 - `supabase/config.toml` apunta a `./seed.sql`, que no existe.
+- `deploy/scripts/render_env.py` y `deploy/tests/` se citan en este fichero (§3, §5.12, §8, §10), pero no existen en el repo.
 
 ## 12. Convenciones
 

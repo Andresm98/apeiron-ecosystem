@@ -9,6 +9,12 @@ export const routes: Routes = [
     loadComponent: () => import('./auth/presentation/login/login.page').then((m) => m.LoginPage),
   },
   {
+    path: 'sistema',
+    canActivate: [authGuard],
+    title: 'Ápeiron | Sistema',
+    loadChildren: () => import('./observatory/observatory.routes').then((m) => m.observatoryRoutes),
+  },
+  {
     path: '',
     canActivate: [authGuard],
     title: 'Ápeiron | Consola',

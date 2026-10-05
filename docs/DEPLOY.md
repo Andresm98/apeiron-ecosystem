@@ -31,6 +31,8 @@ En GitHub solo hay `AWS_SSH_PRIVATE_KEY` (secret) y `EC2_HOST` (variable). La co
 - **Validación antes de cambiar nada:** tras descargar las imágenes, el script ejecuta la clase `Settings` de la propia API, dentro de la imagen nueva, contra el `.env` de la VM. Si la configuración es inválida (por ejemplo, Supabase sin URL), el despliegue se detiene **sin tocar los contenedores en marcha** y el log indica qué falta, sin mostrar valores. Si falta la API key del LLM, solo avisa, porque la API arranca igual.
 - Tras editar `.env` en la VM, aplica los cambios con `cd /opt/apeiron-ecosystem && sudo docker compose --env-file .env --profile web -f deploy/docker-compose.yml up -d` (o con el siguiente push).
 
+**A2A (ADR-011):** para publicar a Ápeiron como agente, define `APEIRON_A2A_SERVER_ENABLED=true` y `APEIRON_A2A_PUBLIC_URL=https://<dominio>` (así la Agent Card anuncia `https`); Nginx ya enruta `/a2a` y `/.well-known/agent-card.json`. Cada worker remoto necesita su credencial en `APEIRON_A2A_TOKEN_<NOMBRE>`, que es un secret más del `.env` de la VM, y su host en `APEIRON_A2A_ALLOWED_HOSTS`.
+
 Las claves quedan solo en la VM, fuera del repositorio y de GitHub. El paso siguiente natural es AWS Secrets Manager o SSM Parameter Store con un rol IAM en la instancia.
 
 El primer push crea los paquetes `apeiron-api` y `apeiron-web` con visibilidad privada. Ese primer CD puede fallar al hacer pull. Después del primer push, abre ambos paquetes en GitHub Packages, cambia **Package visibility** a **Public** y reejecuta el workflow CD fallido desde **Actions**. A partir de entonces EC2 podrá hacer pull anónimo. CI publica con el `GITHUB_TOKEN` integrado (`packages: write`); no crees un PAT adicional.

@@ -5,6 +5,7 @@ from typing import Protocol
 
 from apeiron_core.application.agents.react import ReActAgent
 from apeiron_core.application.ports.outbound.agents import SpecialistAgent
+from apeiron_core.application.ports.outbound.guardrails import GuardrailPort
 from apeiron_core.application.ports.outbound.llm import LLMPort
 from apeiron_core.application.ports.outbound.tools import ToolPort
 
@@ -33,6 +34,7 @@ class AgentFactory(Protocol):
         max_steps: int = 4,
         tool_timeout_s: float = 20.0,
         require_evidence: bool = False,
+        guardrails: GuardrailPort | None = None,
     ) -> SpecialistAgent: ...
 
 
@@ -45,9 +47,12 @@ def _build(
     max_steps: int,
     tool_timeout_s: float,
     require_evidence: bool = False,
+    guardrails: GuardrailPort | None = None,
 ) -> SpecialistAgent:
     selected = [tools[tool_name] for tool_name in wanted if tool_name in tools]
-    return ReActAgent(name, persona, llm, selected, max_steps, tool_timeout_s, require_evidence)
+    return ReActAgent(
+        name, persona, llm, selected, max_steps, tool_timeout_s, require_evidence, guardrails
+    )
 
 
 class AnaximandroFactory:
@@ -55,6 +60,7 @@ class AnaximandroFactory:
     role = "Worker principal: tesis desde el ápeiron, lógica formal y evidencia."
     tools: tuple[str, ...] = (
         "formal_logic_calculator",
+        "scholarly_search",
         "mcp_public_api_tool",
         "vector_memory_retriever",
     )
@@ -66,6 +72,7 @@ class AnaximandroFactory:
         max_steps: int = 4,
         tool_timeout_s: float = 20.0,
         require_evidence: bool = False,
+        guardrails: GuardrailPort | None = None,
     ) -> SpecialistAgent:
         return _build(
             self.name,
@@ -76,13 +83,14 @@ class AnaximandroFactory:
             max_steps,
             tool_timeout_s,
             require_evidence,
+            guardrails,
         )
 
 
 class HeraclitoFactory:
     name = "heraclito"
     role = "Worker dialéctico: replica a Anaximandro desde el devenir y el logos."
-    tools: tuple[str, ...] = ("vector_memory_retriever", "mcp_public_api_tool")
+    tools: tuple[str, ...] = ("vector_memory_retriever", "scholarly_search", "mcp_public_api_tool")
 
     def create(
         self,
@@ -91,6 +99,7 @@ class HeraclitoFactory:
         max_steps: int = 4,
         tool_timeout_s: float = 20.0,
         require_evidence: bool = False,
+        guardrails: GuardrailPort | None = None,
     ) -> SpecialistAgent:
         return _build(
             self.name,
@@ -101,4 +110,49 @@ class HeraclitoFactory:
             max_steps,
             tool_timeout_s,
             require_evidence,
+            guardrails,
+        )
+
+
+REMOTE_STAND_IN_TOOLS = ("vector_memory_retriever",)
+
+
+class RemoteAgentFactory:
+    """Agente externo (A2A, ADR-011): el composition root lo construye con su adaptador.
+
+    Sin `agent` (modo simulación) crea un sustituto ReAct local con el mismo nombre: la
+    simulación recorre el grafo completo sin salir nunca a la red.
+    """
+
+    kind = "remote"
+    tools: tuple[str, ...] = ()
+
+    def __init__(
+        self, name: str, role: str, agent: SpecialistAgent | None = None, endpoint: str = ""
+    ) -> None:
+        self.name, self.role, self.endpoint = name, role, endpoint
+        self._agent = agent
+
+    def create(
+        self,
+        llm: LLMPort,
+        tools: Mapping[str, ToolPort],
+        max_steps: int = 4,
+        tool_timeout_s: float = 20.0,
+        require_evidence: bool = False,
+        guardrails: GuardrailPort | None = None,
+    ) -> SpecialistAgent:
+        if self._agent is not None:
+            return self._agent
+        persona = f"Eres {self.name}, agente remoto (simulado). {self.role} Responde en el idioma del usuario."
+        return _build(
+            self.name,
+            persona,
+            REMOTE_STAND_IN_TOOLS,
+            llm,
+            tools,
+            max_steps,
+            tool_timeout_s,
+            require_evidence,
+            guardrails,
         )

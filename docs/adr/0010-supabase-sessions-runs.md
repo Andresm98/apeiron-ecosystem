@@ -1,7 +1,7 @@
 # ADR-010: Supabase para identidad, sesiones persistentes y ejecuciones de agentes
 
 **Estado:** COMPLETADO (reemplaza en ADR-005 el repositorio SQLite y el token solo en memoria)  
-**Fecha:** 2026-10-04
+**Fecha:** 2026-10-03
 
 ## Contexto
 

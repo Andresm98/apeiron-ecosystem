@@ -3,7 +3,7 @@
 import logging
 import re
 import xml.etree.ElementTree as ET
-from typing import Protocol
+from typing import Any, Protocol
 
 import httpx
 
@@ -14,7 +14,7 @@ _ATOM = "{http://www.w3.org/2005/Atom}"
 
 
 class McpGateway(Protocol):
-    async def call(self, tool: str, args: dict[str, str]) -> str: ...
+    async def call(self, tool: str, args: dict[str, Any]) -> str: ...
 
 
 class McpSdkGateway:
@@ -23,8 +23,8 @@ class McpSdkGateway:
     def __init__(self, url: str) -> None:
         self._url = url
 
-    async def call(self, tool: str, args: dict[str, str]) -> str:
-        from mcp import ClientSession  # import diferido
+    async def call(self, tool: str, args: dict[str, Any]) -> str:
+        from mcp import ClientSession  # import diferido (SDK 2.x)
         from mcp.client.streamable_http import streamable_http_client
         from mcp.types import TextContent
 

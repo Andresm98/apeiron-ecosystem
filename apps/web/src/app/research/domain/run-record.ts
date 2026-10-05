@@ -1,4 +1,4 @@
-import type { AgentStep, Turn, Usage } from './chat.ts';
+import type { AgentStep, GuardEvent, Turn, Usage } from './chat.ts';
 
 /** Resumen de una ejecución persistida (lista del historial). */
 export interface RunSummary {
@@ -7,10 +7,14 @@ export interface RunSummary {
   question: string;
   mode: string;
   simulate: boolean;
-  status: 'completed' | 'error';
+  status: 'completed' | 'blocked' | 'error'; // blocked: el guardrail de entrada rechazó la pregunta (ADR-011)
   usage: Partial<Usage>;
   model: string;
   duration_ms: number;
+  /** Origen: la consola web o otro agente vía A2A (ADR-011). */
+  channel?: 'web' | 'a2a';
+  a2a_task_id?: string | null;
+  guardrails?: GuardEvent[];
 }
 
 /** Agente (orquestador o worker) que actuó en una ejecución, con su esfuerzo. */

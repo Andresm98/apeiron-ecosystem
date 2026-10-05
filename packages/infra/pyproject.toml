@@ -12,7 +12,7 @@ chroma = [
     "onnxruntime",
     "tokenizers"
 ]
-mcp = ["mcp>=1.0"]
+mcp = ["mcp>=2.3,<3"]  # API 2.x (MCPServer, streamable_http_client); validada contra apeiron-scholar
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 
-from apeiron_api.container import _build_store, _build_tools, build_apeiron_graph
+from apeiron_api.container import _build_store, _build_tools, build_apeiron_graph, build_remotes
 from apeiron_api.settings import Settings
 from apeiron_infra.memory.vector import seed_global
 from apeiron_infra.observability.langsmith import configure_langsmith
@@ -30,7 +30,9 @@ async def _graph(simulate: bool) -> Any:
         store = await asyncio.to_thread(_build_store, s)
         await seed_global(store)
         http = httpx.AsyncClient(timeout=15.0, headers={"User-Agent": "apeiron-studio/0.2"})
-        _graphs[key] = build_apeiron_graph(s, _build_tools(s, http, store), simulate)
+        _graphs[key] = build_apeiron_graph(
+            s, _build_tools(s, http, store), simulate, remotes=build_remotes(s, http)
+        )
     return _graphs[key]
 
 

@@ -1,0 +1,226 @@
+<div class="app-shell">
+  <header class="masthead">
+    <a class="wordmark" routerLink="/" aria-label="Ápeiron, consola">
+      <span class="wordmark-symbol" aria-hidden="true">Α</span>
+      <span>
+        <span class="wordmark-kicker">Filosofía · Ciencia · Debate</span>
+        <span class="wordmark-name">Ápeiron</span>
+      </span>
+    </a>
+
+    <nav class="top-nav" aria-label="Secciones">
+      <a routerLink="/">Consola</a>
+      <a routerLink="/sistema" aria-current="page" class="top-nav-active">Sistema</a>
+    </nav>
+
+    <div class="session-indicator">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span><strong>{{ session.username() }}</strong> · sesión activa</span>
+      <button class="quiet-button" type="button" (click)="logout()">Salir</button>
+    </div>
+  </header>
+
+  @if (store.status(); as s) {
+    <section class="overview" aria-labelledby="overview-title">
+      <div>
+        <p class="eyebrow">OBSERVATORIO · {{ s.service.env.toUpperCase() }}</p>
+        <h1 id="overview-title">
+          <span [class]="status(store.health()!)" aria-hidden="true">{{ healthIcon[store.health()!] }}</span>
+          {{ store.health() === 'ok' ? 'Todo operativo' : store.health() === 'degraded' ? 'Funcionando con degradación' : 'Hay componentes caídos' }}
+        </h1>
+        <p class="overview-meta">
+          API v{{ s.service.version }} · identidad {{ s.service.auth_provider }} · en marcha desde hace {{ uptime(s.service.uptime_s) }}
+        </p>
+      </div>
+      <div class="refresh">
+        <span class="refresh-time" aria-live="polite">Actualizado {{ store.updatedAt()?.toLocaleTimeString('es') ?? '—' }}</span>
+        <label class="auto-toggle">
+          <input type="checkbox" [checked]="store.auto()" (change)="toggleAuto()" />
+          Auto (10 s)
+        </label>
+        <button class="quiet-button" type="button" (click)="refresh()">Actualizar</button>
+      </div>
+    </section>
+
+    @if (store.error()) {
+      <p class="form-error" role="alert">{{ store.error() }} Se muestran los últimos datos recibidos.</p>
+    }
+
+    <div class="system-grid">
+      <!-- 01 · Componentes -->
+      <section class="panel span-2" aria-labelledby="components-title">
+        <p class="eyebrow">01 / COMPONENTES</p>
+        <h2 id="components-title">Estado de las dependencias</h2>
+        <ul class="components">
+          @for (c of s.components; track c.id) {
+            <li class="component">
+              <span [class]="status(c.status)">
+                <span aria-hidden="true">{{ healthIcon[c.status] }}</span> {{ healthLabel[c.status] }}
+              </span>
+              <span class="component-label">{{ c.label }}</span>
+              <span class="component-detail">{{ c.detail }}</span>
+            </li>
+          }
+        </ul>
+      </section>
+
+      <!-- 02 · Límites -->
+      <section class="panel" aria-labelledby="limits-title">
+        <p class="eyebrow">02 / LÍMITES</p>
+        <h2 id="limits-title">Cotas y cupo</h2>
+        <dl class="limits">
+          <div><dt>Consultas este minuto</dt><dd>{{ s.limits.chat_remaining ?? '∞' }} de {{ s.limits.chat_per_min || '∞' }} disponibles</dd></div>
+          <div><dt>Rondas de debate</dt><dd>1–{{ s.limits.max_rounds }}</dd></div>
+          <div><dt>Pasos ReAct por turno</dt><dd>{{ s.limits.max_react_steps }}</dd></div>
+          <div><dt>Timeout por nodo</dt><dd>{{ s.limits.node_timeout_s }} s</dd></div>
+          <div><dt>Timeout por herramienta</dt><dd>{{ s.limits.tool_timeout_s }} s</dd></div>
+          <div><dt>Evidencia obligatoria</dt><dd>{{ s.limits.require_evidence ? 'sí' : 'no' }}</dd></div>
+        </dl>
+      </section>
+      <!-- 03 · Actividad -->
+      @if (activity(); as a) {
+        <section class="panel span-2" aria-labelledby="activity-title">
+          <p class="eyebrow">03 / ACTIVIDAD DEL PROCESO</p>
+          <h2 id="activity-title">Qué ha hecho esta instancia</h2>
+          <p class="panel-note">Agregados en memoria desde el arranque ({{ time(a.since) }}); sin preguntas ni identidades.</p>
+          <dl class="tiles">
+            <div class="tile tile-live"><dt>En curso ahora</dt><dd>{{ a.active_runs }}</dd></div>
+            <div class="tile"><dt>Ejecuciones</dt><dd>{{ a.runs }}</dd></div>
+            <div class="tile"><dt>Completadas</dt><dd>{{ count(a.statuses, 'completed') }}</dd></div>
+            <div class="tile"><dt>Bloqueadas</dt><dd>{{ count(a.statuses, 'blocked') }}</dd></div>
+            <div class="tile"><dt>Con error</dt><dd>{{ count(a.statuses, 'error') }}</dd></div>
+            <div class="tile"><dt>Vía A2A</dt><dd>{{ count(a.channels, 'a2a') }}</dd></div>
+            <div class="tile"><dt>Llamadas LLM</dt><dd>{{ a.llm_calls }}</dd></div>
+            <div class="tile"><dt>Tokens</dt><dd>{{ a.total_tokens.toLocaleString('es') }}</dd></div>
+            <div class="tile"><dt>Latencia p50</dt><dd>{{ seconds(a.latency_ms.p50) }}</dd></div>
+            <div class="tile"><dt>Latencia p95</dt><dd>{{ seconds(a.latency_ms.p95) }}</dd></div>
+          </dl>
+          @if (failures().length) {
+            <p class="warning-line" role="status">
+              @for (f of failures(); track f[0]) {
+                <span>◐ {{ f[0] === 'run_persist_failed' ? 'Guardado en Supabase fallido' : f[0] === 'memorize_failed' ? 'Memorización fallida' : f[0] }}: {{ f[1] }}×</span>
+              }
+            </p>
+          }
+        </section>
+
+        <!-- 04 · Guardrails -->
+        <section class="panel" aria-labelledby="guard-title">
+          <p class="eyebrow">04 / GUARDRAILS</p>
+          <h2 id="guard-title">Intervenciones</h2>
+          @if (guardrails().length) {
+            <ul class="bars" aria-label="Intervenciones por regla">
+              @for (g of guardrails(); track g.stage + g.rule) {
+                <li class="bar-row" [attr.title]="(stageLabel[g.stage] ?? g.stage) + ' · ' + ruleLabel(g.rule) + ': ' + g.count">
+                  <span class="bar-label">{{ ruleLabel(g.rule) }} <em>{{ stageLabel[g.stage] ?? g.stage }}</em></span>
+                  <span class="bar-track" aria-hidden="true"><span class="bar" [style.width.%]="barWidth(g.count, guardrailMax())"></span></span>
+                  <span class="bar-value">{{ g.count }}</span>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="empty">Sin intervenciones desde el arranque.</p>
+          }
+        </section>
+      }
+
+      <!-- 05 · Agentes -->
+      <section class="panel" aria-labelledby="agents-title">
+        <p class="eyebrow">05 / AGENTES</p>
+        <h2 id="agents-title">Topología</h2>
+        @if (store.topology(); as t) {
+          <ul class="agents">
+            <li>
+              <strong>Ápeiron</strong> <span class="chip">orquestador</span>
+              <span class="agent-detail">{{ t.llm.provider }}:{{ t.llm.model }}</span>
+            </li>
+            @for (a of t.agents; track a.name) {
+              <li>
+                <strong>{{ agentLabel(a.name) }}</strong>
+                <span class="chip" [class.chip-remote]="a.kind === 'remote'">{{ a.kind === 'remote' ? 'A2A · ' + (a.endpoint ?? 'remoto') : 'local · ReAct' }}</span>
+                @if (t.debate_participants.includes(a.name)) { <span class="chip">debate</span> }
+                <span class="agent-detail">{{ a.role }}</span>
+                @if (a.tools.length) { <span class="agent-tools">{{ a.tools.join(' · ') }}</span> }
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="empty">Cargando topología…</p>
+        }
+      </section>
+
+      <!-- 06 · A2A -->
+      <section class="panel" aria-labelledby="a2a-title">
+        <p class="eyebrow">06 / PROTOCOLO A2A</p>
+        <h2 id="a2a-title">Otros agentes</h2>
+        @if (s.a2a.server_enabled) {
+          <p class="panel-note">
+            Agent Card: <a [href]="s.a2a.card_url" target="_blank" rel="noopener">{{ s.a2a.card_url }}</a>
+          </p>
+          @if (a2aTasks().length) {
+            <p class="task-counts">
+              @for (t of a2aTasks(); track t[0]) { <span class="chip">{{ taskStateLabel(t[0]) }} {{ t[1] }}</span> }
+            </p>
+          }
+          <h3>Tus tareas recientes</h3>
+          <ul class="tasks">
+            @for (task of s.a2a.my_tasks; track task.id) {
+              <li>
+                <span class="chip" [class.chip-warn]="task.state === 'TASK_STATE_REJECTED' || task.state === 'TASK_STATE_FAILED'">{{ taskStateLabel(task.state) }}</span>
+                <span class="task-question">{{ task.question }}</span>
+                <span class="task-time">{{ time(task.updated_at) }}</span>
+              </li>
+            } @empty {
+              <li class="empty">Ningún agente ha trabajado en tu nombre en esta instancia.</li>
+            }
+          </ul>
+        } @else {
+          <p class="empty">Servidor A2A desactivado (APEIRON_A2A_SERVER_ENABLED=false).</p>
+        }
+      </section>
+
+      <!-- 07 · Tu actividad -->
+      <section class="panel" aria-labelledby="mine-title">
+        <p class="eyebrow">07 / TU ACTIVIDAD</p>
+        <h2 id="mine-title">Tus últimas ejecuciones</h2>
+        @if (!historyEnabled()) {
+          <p class="empty">El historial requiere Supabase (modo local sin persistencia).</p>
+        } @else if (store.history(); as h) {
+          <dl class="tiles tiles-compact">
+            <div class="tile"><dt>Ejecuciones</dt><dd>{{ h.total }}</dd></div>
+            <div class="tile"><dt>Completadas</dt><dd>{{ h.completed }}</dd></div>
+            <div class="tile"><dt>Bloqueadas</dt><dd>{{ h.blocked }}</dd></div>
+            <div class="tile"><dt>Con error</dt><dd>{{ h.errors }}</dd></div>
+            <div class="tile"><dt>Simuladas</dt><dd>{{ h.simulated }}</dd></div>
+            <div class="tile"><dt>Vía A2A</dt><dd>{{ h.a2a }}</dd></div>
+            <div class="tile"><dt>Tokens</dt><dd>{{ h.tokens.toLocaleString('es') }}</dd></div>
+            <div class="tile"><dt>Duración media</dt><dd>{{ seconds(h.avgDurationMs) }}</dd></div>
+          </dl>
+          @if (h.guardrails.length) {
+            <ul class="bars" aria-label="Tus intervenciones de guardrails por regla">
+              @for (g of h.guardrails; track g.rule) {
+                <li class="bar-row" [attr.title]="ruleLabel(g.rule) + ': ' + g.count">
+                  <span class="bar-label">{{ ruleLabel(g.rule) }}</span>
+                  <span class="bar-track" aria-hidden="true"><span class="bar" [style.width.%]="barWidth(g.count, historyRulesMax())"></span></span>
+                  <span class="bar-value">{{ g.count }}</span>
+                </li>
+              }
+            </ul>
+          }
+        } @else {
+          <p class="empty">{{ store.historyError() || 'Cargando historial…' }}</p>
+        }
+      </section>
+
+    </div>
+  } @else {
+    <section class="overview">
+      <p class="empty" aria-live="polite">{{ store.error() || 'Consultando el estado del sistema…' }}</p>
+    </section>
+  }
+
+  <footer class="page-footer">
+    <span>Ápeiron Ecosystem</span>
+    <span>Observatorio · /v1/system · refresco cada 10 s</span>
+  </footer>
+</div>

@@ -5,7 +5,21 @@
     <title>Ápeiron | Consola</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#172b22" />
+    <meta name="theme-color" content="#eef1eb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1713" media="(prefers-color-scheme: dark)" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    />
+    <script>
+      // Aplica el tema guardado antes del primer pintado (evita el destello claro/oscuro).
+      try {
+        const theme = localStorage.getItem('apeiron-theme');
+        if (theme === 'light' || theme === 'dark') document.documentElement.dataset['theme'] = theme;
+      } catch {}
+    </script>
   </head>
   <body>
     <app-root></app-root>

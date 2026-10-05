@@ -1,11 +1,12 @@
 import { Component, effect, inject } from '@angular/core';
 import { Router, RouterOutlet } from '@angular/router';
 import { SessionStore } from './auth/application/session.store';
+import { ThemeToggleComponent } from './shared/presentation/theme-toggle/theme-toggle.component';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet],
-  template: '<router-outlet />',
+  imports: [RouterOutlet, ThemeToggleComponent],
+  template: '<router-outlet /><app-theme-toggle />',
 })
 export class App {
   constructor() {

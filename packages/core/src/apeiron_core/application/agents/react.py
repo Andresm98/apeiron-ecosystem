@@ -12,10 +12,13 @@ from typing import Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from apeiron_core.application.agents.base import dialogue_block, emit_step, stream_emitter
+from apeiron_core.application.guardrails import DATA_RULE, apply_guardrail
 from apeiron_core.application.ports.outbound.events import Emit
+from apeiron_core.application.ports.outbound.guardrails import GuardrailPort
 from apeiron_core.application.ports.outbound.llm import LLMPort
 from apeiron_core.application.ports.outbound.tools import ToolPort
 from apeiron_core.domain.entities.agent_turn import AgentTurn
+from apeiron_core.domain.value_objects.guardrail import GuardrailRecord
 
 PREVIEW_INPUT, PREVIEW_OBSERVATION = 200, 480
 EVIDENCE_RULE = (
@@ -26,7 +29,7 @@ EVIDENCE_RETRY = (
     "\nSistema: aún no has consultado ninguna herramienta. Responde SOLO con:\n"
     "Thought: <qué evidencia buscas>\nAction: <herramienta>\nAction Input: <consulta>\n"
 )
-FALLBACK_TOOLS = ("vector_memory_retriever", "mcp_public_api_tool")
+FALLBACK_TOOLS = ("vector_memory_retriever", "scholarly_search", "mcp_public_api_tool")
 # Tolerante a desvíos habituales de los LLM: **negritas**, `backticks` y la entrada de
 # la acción en la línea siguiente a "Action Input:".
 ACTION_RE = re.compile(
@@ -63,6 +66,8 @@ class WorkerState(TypedDict, total=False):
     retry: bool
     auto: bool
     failed: bool  # sin respuesta final válida: el turno se publica como degradado
+    evidence: list[str]  # observaciones reales (ya saneadas): base para verificar citas
+    guardrails: list[GuardrailRecord]
 
 
 class ReActAgent:
@@ -77,6 +82,7 @@ class ReActAgent:
         max_steps: int = 4,
         tool_timeout_s: float = 20.0,
         require_evidence: bool = False,
+        guardrails: GuardrailPort | None = None,
     ) -> None:
         if not 1 <= max_steps <= 8:
             raise ValueError("max_steps debe estar entre 1 y 8")
@@ -90,6 +96,7 @@ class ReActAgent:
         self._tool_timeout_s = tool_timeout_s
         # Exigir evidencia necesita al menos un paso de tool y otro de respuesta.
         self._require_evidence = require_evidence and bool(tools) and max_steps >= 2
+        self._guardrails = guardrails
         self.graph: Any = self._build_graph()
 
     def _build_graph(self) -> Any:
@@ -111,13 +118,14 @@ class ReActAgent:
         return "reason" if state.get("retry") and not state.get("answer") else END
 
     def _system(self) -> str:
+        data_rule = f"\n\n{DATA_RULE}" if self._guardrails else ""
         if not self._tools:
-            return self._persona
+            return self._persona + data_rule
         catalog = "\n".join(
             f"- {tool.name}: {tool.description}" for tool in self._tools.values()
         )
         rule = f"\n{EVIDENCE_RULE}" if self._require_evidence else ""
-        return f"{self._persona}\n\nHerramientas disponibles:\n{catalog}\n\n{FORMAT}{rule}"
+        return f"{self._persona}\n\nHerramientas disponibles:\n{catalog}\n\n{FORMAT}{rule}{data_rule}"
 
     async def _run_tool(self, tool_name: str, tool_input: str) -> str:
         tool = self._tools.get(tool_name)
@@ -185,6 +193,13 @@ class ReActAgent:
         step = state.get("step", 0)
         notify(f"[{self.name} Executing Tool: {tool_name}]")
         observation = await self._run_tool(tool_name, tool_input)
+        # Inyección indirecta: la observación se sanea antes de entrar al prompt y al stream.
+        verdict, records, messages = await apply_guardrail(
+            self._guardrails, "observation", observation, agent=self.name, round_=state.get("round", 0)
+        )
+        observation = verdict.text
+        for message in messages:
+            notify(message)
         emit_step(
             f"[{self.name} Reflecting]",
             {
@@ -204,6 +219,8 @@ class ReActAgent:
             "action_tool": "",
             "retry": False,
             "auto": False,
+            "evidence": [*state.get("evidence", []), observation],
+            "guardrails": [*state.get("guardrails", []), *records],
         }
 
     async def respond(

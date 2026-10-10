@@ -1,27 +1,41 @@
-# Desarrollo: docker compose -f deploy/docker-compose.yml up --build
-# docker compose -f deploy/docker-compose.yml --profile web up --build
-# LangGraph Studio: docker compose -f deploy/docker-compose.yml --profile studio up --build studio
+# Stack completo (api, mcp-scholar, chroma, web) desde cero, con un solo comando desde la raíz del repo:
+#   docker compose -f deploy/docker-compose.yml up --build -d --wait   -> http://localhost
+# Sin .env arranca con los valores por defecto de Settings (auth local, FakeLLM); con .env usa su configuración.
+#
+# LangGraph Studio (solo desarrollo, opt-in):
+#   docker compose -f deploy/docker-compose.yml --profile studio up --build -d studio
 #   -> https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+#
+# Producción: deploy-ec2.sh inyecta APEIRON_API_IMAGE/APEIRON_WEB_IMAGE (GHCR) y levanta con --no-build.
 
-# Producción: --profile web, imágenes ECR inyectadas por deploy-ec2.yml.
+x-api-build: &api-build
+  context: ..
+  dockerfile: deploy/docker/api.Dockerfile
+  args:
+    PYTHON_VERSION: "3.14"
+
+x-env-file: &env-file
+  - path: ../.env
+    required: false                 # sin .env, Settings usa sus valores por defecto
+
 services:
   api:
     image: ${APEIRON_API_IMAGE:-apeiron-api:local}
-    build:
-      context: ..
-      dockerfile: deploy/docker/api.Dockerfile
-      args:
-        PYTHON_VERSION: "3.14"
-    env_file: ../.env
+    build: *api-build
+    env_file: *env-file
     environment:
+      APEIRON_VECTOR_BACKEND: chroma  # dentro de Compose siempre hay Chroma
       APEIRON_CHROMA_HOST: chroma
       APEIRON_CHROMA_PORT: "8000"
       APEIRON_SCHOLAR_MCP_URL: http://mcp-scholar:8080/mcp
     volumes:
       - api-data:/app/data          # usuarios SQLite (APEIRON_USERS_DB_PATH=data/users.db)
+      - embedding-models:/home/app/.cache/chroma  # modelo ONNX de Chroma (~80 MB): se descarga una vez
     depends_on:
-      - chroma
-      - mcp-scholar                 # opcional: si no responde, scholarly_search degrada (breaker)
+      chroma:
+        condition: service_healthy  # la API siembra la memoria global al arrancar
+      mcp-scholar:
+        condition: service_started  # opcional: si no responde, scholarly_search degrada (breaker)
     ports:
       - "127.0.0.1:8000:8000"
     restart: unless-stopped
@@ -30,6 +44,7 @@ services:
   # sin puerto publicado: solo lo alcanza la red de Compose (ADR-011).
   mcp-scholar:
     image: ${APEIRON_API_IMAGE:-apeiron-api:local}
+    build: *api-build               # misma imagen que api: la caché de Docker la construye una vez
     command: ["python", "-m", "apeiron_mcp_scholar"]
     environment:
       APEIRON_OPENALEX_MAILTO: ${APEIRON_OPENALEX_MAILTO:-}
@@ -47,11 +62,17 @@ services:
     environment:
       IS_PERSISTENT: "TRUE"
     volumes:
-      - chroma-data:/data           # verifica la ruta de persistencia según la versión de la imagen
+      - chroma-data:/data           # ruta de persistencia de Chroma 1.x
+    healthcheck:                    # la imagen no trae curl ni python: heartbeat por /dev/tcp de bash
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8000 && printf 'GET /api/v2/heartbeat HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 200"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+      start_interval: 2s
     restart: unless-stopped
 
   web:
-    profiles: ["web"]
     image: ${APEIRON_WEB_IMAGE:-apeiron-web:local}
     build:
       context: ..
@@ -69,17 +90,23 @@ services:
     build:
       context: ..
       dockerfile: deploy/docker/studio.Dockerfile
-    env_file: ../.env
+    env_file: *env-file
     environment:
+      APEIRON_VECTOR_BACKEND: chroma
       APEIRON_CHROMA_HOST: chroma
       APEIRON_CHROMA_PORT: "8000"
       APEIRON_SCHOLAR_MCP_URL: http://mcp-scholar:8080/mcp
+    volumes:
+      - embedding-models:/home/app/.cache/chroma  # reutiliza el modelo que descargó la API
     depends_on:
-      - chroma
-      - mcp-scholar
+      api:
+        condition: service_healthy  # API sana = modelo de embeddings ya descargado en el volumen
+      mcp-scholar:
+        condition: service_started
     ports:
       - "127.0.0.1:2024:2024"
 
 volumes:
   api-data:
   chroma-data:
+  embedding-models:

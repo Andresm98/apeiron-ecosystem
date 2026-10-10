@@ -29,7 +29,7 @@ En GitHub solo hay `AWS_SSH_PRIVATE_KEY` (secret) y `EC2_HOST` (variable). La co
 - **Si `.env` existe, no se toca nunca**: tus ediciones sobreviven a todos los despliegues.
 - Para volver a sincronizar con el template: `sudo rm /opt/apeiron-ecosystem/.env` y vuelve a desplegar (o compáralo a mano con `.env.example`, que está al lado).
 - **Validación antes de cambiar nada:** tras descargar las imágenes, el script ejecuta la clase `Settings` de la propia API, dentro de la imagen nueva, contra el `.env` de la VM. Si la configuración es inválida (por ejemplo, Supabase sin URL), el despliegue se detiene **sin tocar los contenedores en marcha** y el log indica qué falta, sin mostrar valores. Si falta la API key del LLM, solo avisa, porque la API arranca igual.
-- Tras editar `.env` en la VM, aplica los cambios con `cd /opt/apeiron-ecosystem && sudo docker compose --env-file .env --profile web -f deploy/docker-compose.yml up -d` (o con el siguiente push).
+- Tras editar `.env` en la VM, aplica los cambios con `cd /opt/apeiron-ecosystem && sudo docker compose --env-file .env -f deploy/docker-compose.yml up -d` (o con el siguiente push).
 
 **A2A (ADR-011):** para publicar a Ápeiron como agente, define `APEIRON_A2A_SERVER_ENABLED=true` y `APEIRON_A2A_PUBLIC_URL=https://<dominio>` (así la Agent Card anuncia `https`); Nginx ya enruta `/a2a` y `/.well-known/agent-card.json`. Cada worker remoto necesita su credencial en `APEIRON_A2A_TOKEN_<NOMBRE>`, que es un secret más del `.env` de la VM, y su host en `APEIRON_A2A_ALLOWED_HOSTS`.
 

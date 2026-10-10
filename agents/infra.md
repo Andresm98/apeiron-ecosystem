@@ -116,7 +116,7 @@ Recuerda:
 
 ```sh
 docker compose -f deploy/docker-compose.yml config -q
-docker compose -f deploy/docker-compose.yml --profile web up --build
+docker compose -f deploy/docker-compose.yml up --build -d --wait
 docker compose -f deploy/docker-compose.yml exec -T api python - < deploy/scripts/smoke_e2e.py
 make test                                   # incluye deploy/tests (render_env)
 npx supabase db reset                       # si tocaste migraciones (stack local)

@@ -38,7 +38,7 @@ export APEIRON_API_IMAGE="${IMAGE_PREFIX}/apeiron-api:${IMAGE_TAG}"
 export APEIRON_WEB_IMAGE="${IMAGE_PREFIX}/apeiron-web:${IMAGE_TAG}"
 export APEIRON_CHROMA_IMAGE="$CHROMA_IMAGE"
 compose() {
-  docker compose --env-file .env --profile web -f deploy/docker-compose.yml "$@"
+  docker compose --env-file .env -f deploy/docker-compose.yml "$@"
 }
 
 echo "[deploy] Pulling API, web, and Chroma images"

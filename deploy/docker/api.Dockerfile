@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # Multistage: build de dependencias -> runtime ligero, usuario no-root.
 # Python 3.14 es el runtime de CI y producción (ADR-002).
 
@@ -32,11 +31,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN groupadd --system app \
     && useradd --system --gid app --create-home app \
-    && mkdir -p /app/data \
-    && chown -R app:app /app
+    && mkdir -p /app/data /home/app/.cache/chroma \
+    && chown -R app:app /app /home/app/.cache
 
 # Rutas relativas (p. ej. APEIRON_USERS_DB_PATH=data/users.db) resuelven bajo /app.
-# /app/data es propiedad de `app`; un volumen nombrado montado ahí hereda ese owner.
+# /app/data y la caché de Chroma son de `app`; un volumen nombrado montado ahí hereda ese owner.
 WORKDIR /app
 
 COPY --from=builder /install /usr/local

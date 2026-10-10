@@ -61,14 +61,17 @@ Con `APEIRON_AUTH_PROVIDER=local` la app funciona sin Supabase (SQLite y JWT en 
 ### 2. Levantar el stack
 
 ```sh
-docker compose -f deploy/docker-compose.yml --profile web up --build
+docker compose -f deploy/docker-compose.yml up --build -d --wait
 ```
+
+Un solo comando construye las imágenes y levanta `chroma`, `mcp-scholar`, `api` y `web` en orden (cada uno espera al healthcheck del anterior). `--wait` termina cuando todo está sano. Sin `.env` arranca igualmente con los valores por defecto (auth local y `FakeLLM`). Para pararlo: `docker compose -f deploy/docker-compose.yml down` (añade `-v` para borrar también los volúmenes).
 
 | Servicio | Puerto | Función |
 |---|---|---|
 | `web` | `80` (público) | Nginx: sirve Angular y reenvía `/api` a la API, con SSE sin buffering |
 | `api` | `127.0.0.1:8000` | FastAPI y LangGraph |
 | `chroma` | interno | Memoria vectorial (volumen `chroma-data`) |
+| `mcp-scholar` | interno | Servidor MCP de literatura académica (OpenAlex) |
 | `studio` | `127.0.0.1:2024` | Opcional (perfil `studio`): servidor de LangGraph Studio |
 
 La primera vez que arranca, la API descarga el modelo de embeddings de Chroma (~80 MB).
@@ -570,3 +573,4 @@ docs/adr/, docs/DEPLOY.md
 | [009](docs/adr/0009-supervisor-worker-studio.md) | Supervisor/worker, workers como subgrafos y LangGraph Studio |
 | [010](docs/adr/0010-supabase-sessions-runs.md) | Supabase: identidad, sesiones persistentes y ejecuciones de agentes |
 | [011](docs/adr/0011-a2a-guardrails.md) | Protocolo A2A, guardrails y observabilidad del sistema |
+| [012](docs/adr/0012-cloud-platform-hardening.md) | Endurecimiento de la plataforma cloud: IaC, entrega sin SSH, secretos gestionados, TLS y estado compartido (propuesto) |

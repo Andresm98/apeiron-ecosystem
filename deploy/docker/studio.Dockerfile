@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # Servidor local de LangGraph (`langgraph dev`, runtime en memoria) para LangGraph Studio.
 # Solo desarrollo: no es parte del despliegue de producción (ADR-009).
 # Studio (UI web) se abre en: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
@@ -28,7 +27,8 @@ RUN pip install \
     "langgraph-cli[inmem]>=0.4,<0.5"
 
 COPY langgraph.json langgraph.json
-RUN touch .env && chown -R app:app /app
+# La caché del modelo de embeddings de Chroma se comparte con la API por un volumen de Compose.
+RUN touch .env && mkdir -p /home/app/.cache/chroma && chown -R app:app /app /home/app/.cache
 
 USER app
 

@@ -275,7 +275,7 @@ APEIRON_LLM_PROVIDER=fake APEIRON_AUTH_PROVIDER=local APEIRON_VECTOR_BACKEND=mem
 cd apps/web && npm ci && npm start -- --proxy-config proxy.conf.json                         # http://localhost:4200
 cd apps/web && npm test      # node:test (reducers, parser, auth, architecture.spec)
 cd apps/web && npm run build -- --configuration production
-docker compose -f deploy/docker-compose.yml --profile web up --build        # stack completo en http://localhost
+docker compose -f deploy/docker-compose.yml up --build -d --wait           # stack completo desde cero en http://localhost
 docker compose -f deploy/docker-compose.yml --profile studio up --build studio   # LangGraph Studio :2024
 docker compose -f deploy/docker-compose.yml exec -T api python - < deploy/scripts/smoke_e2e.py
 npx supabase migration new <nombre> | migration list | db push              # SOLO con confirmación del usuario si es remoto

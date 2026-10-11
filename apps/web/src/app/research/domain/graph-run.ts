@@ -38,6 +38,14 @@ export function applyNodeEvent(run: GraphRun, ev: NodeEvent): GraphRun {
   return { status, visits, edges, current };
 }
 
+/** Cierra los nodos que siguen activos al cancelar (`idle`) o fallar (`error`): nada queda trabajando. */
+export function settleRun(run: GraphRun, to: Exclude<NodeStatus, 'active' | 'done'>): GraphRun {
+  const status = Object.fromEntries(
+    Object.entries(run.status).map(([node, value]) => [node, value === 'active' ? to : value]),
+  ) as Record<string, NodeStatus>;
+  return { ...run, status };
+}
+
 export function edgeVisited(run: GraphRun, from: string, to: string): boolean {
   return run.edges.includes(`${from}>${to}`);
 }

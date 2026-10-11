@@ -1,11 +1,12 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Subscription } from 'rxjs';
-import { ChatRequest } from '../domain/chat';
+import { Observable, Subscription } from 'rxjs';
+import { ChatEvent, ChatRequest } from '../domain/chat';
 import { AgentExecution, RunSummary } from '../domain/run-record';
 import { Topology } from '../domain/topology';
 import { ChatStreamPort } from './ports/chat-stream.port';
 import { RunHistoryRepository } from './ports/run-history.repository';
 import { TopologyRepository } from './ports/topology.repository';
+import { AgentDirectory } from './agent-directory';
 import { RunState, cancelRun, failRun, fromRecord, idleRun, reduceRunEvent, startRun } from './run-state';
 
 /** Estado de la consola: turnos, traza, grafo en vivo y consumo de la ejecución. */
@@ -24,14 +25,19 @@ export class ResearchStore {
   readonly steps = computed(() => this.run$().steps);
   readonly answer = computed(() => this.run$().answer);
   readonly error = computed(() => this.run$().error);
+  readonly failure = computed(() => this.run$().failure);
   readonly graph = computed(() => this.run$().graph);
   readonly usage = computed(() => this.run$().usage);
   readonly guards = computed(() => this.run$().guards);
   readonly blocked = computed(() => this.run$().blocked);
+  /** Instantánea de la sesión deliberativa en curso (Polis, ADR-013). */
+  readonly session = computed(() => this.run$().session);
 
   readonly simulated = signal(false);
   readonly elapsedMs = signal(0);
   readonly topology = signal<Topology | null>(null);
+  readonly topologyError = signal(false);
+  private readonly directory = inject(AgentDirectory);
   readonly history = signal<RunSummary[]>([]);
   readonly historyError = signal('');
   readonly openedRunId = signal<string | null>(null);
@@ -70,21 +76,33 @@ export class ResearchStore {
   async loadTopology(): Promise<void> {
     if (this.topology()) return;
     try {
-      this.topology.set(await this.topologies.load());
+      const topology = await this.topologies.load();
+      this.directory.learn(topology.agents);
+      this.topology.set(topology);
+      this.topologyError.set(false);
     } catch {
-      this.topology.set(null); // el grafo usa la topología por defecto
+      this.topology.set(null); // sin topología no hay agentes que dibujar: la UI lo dice
+      this.topologyError.set(true);
     }
   }
 
   run(req: ChatRequest): void {
+    this.follow(this.chat.stream(req), !!req.simulate);
+  }
+
+  /**
+   * Sigue cualquier flujo de eventos del contrato con el mismo reducer: el chat, una sesión deliberativa o la
+   * reproducción de una crónica (ADR-013). Cancelar = `cancel()`.
+   */
+  follow(stream: Observable<ChatEvent>, simulate: boolean): void {
     this.sub?.unsubscribe();
     this.openedRunId.set(null);
     this.openedAgents.set([]);
     this.run$.set(startRun());
-    this.simulated.set(!!req.simulate);
+    this.simulated.set(simulate);
     this.elapsedMs.set(0);
     this.startedAt = performance.now();
-    this.sub = this.chat.stream(req).subscribe({
+    this.sub = stream.subscribe({
       next: (ev) => this.apply(reduceRunEvent(this.run$(), ev)),
       error: (e: unknown) => this.apply(failRun(this.run$(), e instanceof Error ? e.message : String(e))),
       // El stream cierra después de que la API persiste la ejecución: ahora sí está en el historial.

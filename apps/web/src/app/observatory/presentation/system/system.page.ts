@@ -3,7 +3,7 @@ import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../auth/application/auth.service';
 import { SessionStore } from '../../../auth/application/session.store';
 import { GUARDRAIL_STAGES, ruleLabel } from '../../../research/domain/guardrails';
-import { agentLabel } from '../../../research/presentation/agent-label';
+import { AgentDirectory } from '../../../research/application/agent-directory';
 import { ObservatoryStore } from '../../application/observatory.store';
 import {
   HEALTH_ICON, HEALTH_LABEL, Health, barWidth, formatUptime, guardrailCounts, taskStateLabel,
@@ -27,7 +27,7 @@ export class SystemPage implements OnInit, OnDestroy {
   readonly stageLabel = GUARDRAIL_STAGES as Record<string, string>;
   readonly ruleLabel = ruleLabel;
   readonly taskStateLabel = taskStateLabel;
-  readonly agentLabel = agentLabel;
+  readonly agentLabel = inject(AgentDirectory).label;
   readonly uptime = formatUptime;
   readonly barWidth = barWidth;
 

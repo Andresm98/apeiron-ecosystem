@@ -1,0 +1,182 @@
+// Contenido de los diálogos de lugar: ágora (fase 2), morada de un agente, Archivo y Faro (fase 4) — ADR-013.
+// La barra de turno y la tribuna tienen sus propios estilos en `hud/`. Colores solo desde los tokens `--hud-*`.
+@keyframes breathe {
+  50% { opacity: 0.45; transform: scale(0.94); }
+}
+
+:host ::ng-deep .polis-citizen-turn .polis-citizen-name {
+  border-color: #f2c14e;
+  background: #f2c14e;
+  color: #14110a;
+  text-shadow: none;
+  animation: breathe 1s ease-in-out infinite;
+}
+
+.polis-button {
+  display: inline-block;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--hud-accent);
+  color: var(--hud-on-accent);
+  font: 650 14px var(--font-text);
+  text-decoration: none;
+  cursor: pointer;
+
+  &:disabled { opacity: 0.45; cursor: not-allowed; }
+}
+
+.polis-button-quiet {
+  border: 1px solid var(--hud-line);
+  background: var(--hud-quiet);
+  color: var(--hud-ink);
+}
+
+.polis-status { font-weight: 600; }
+
+.polis-notice {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--hud-danger);
+  background: rgb(239 100 97 / 10%);
+  color: var(--hud-danger);
+  font-size: 13px;
+}
+
+.polis-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 8px;
+  padding: 0;
+  list-style: none;
+
+  li {
+    padding: 2px 8px;
+    border: 1px solid var(--hud-line);
+    border-radius: 3px;
+    font-size: 13px;
+  }
+}
+
+.polis-chips li.polis-chip-self { border-color: var(--hud-gold); color: var(--hud-gold); }
+
+.polis-chip-button {
+  padding: 4px 10px;
+  border: 1px solid var(--hud-line);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--hud-ink);
+  font: 500 13px var(--font-text);
+  cursor: pointer;
+
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.polis-state {
+  display: inline-block;
+  margin: 4px 0;
+  padding: 2px 8px;
+  border: 1px solid var(--hud-line);
+  border-radius: 3px;
+  font: 600 12px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.polis-state[data-state='working'],
+.polis-state[data-state='degraded'] { border-color: var(--hud-warn); color: var(--hud-warn); }
+.polis-state[data-state='using_tool'] { border-color: var(--hud-focus); color: var(--hud-focus); }
+.polis-state[data-state='error'],
+.polis-state[data-state='down'] { border-color: var(--hud-danger); color: var(--hud-danger); }
+.polis-state[data-state='ok'],
+.polis-state[data-state='done'] { border-color: #9ee493; color: #9ee493; }
+
+.polis-tools {
+  margin: 0;
+  padding-left: 18px;
+
+  span { color: var(--hud-muted); }
+}
+
+.polis-answer {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--accent, var(--hud-gold));
+  background: var(--hud-quiet);
+  white-space: pre-wrap;
+
+  p { margin: 0; }
+}
+
+.polis-step {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--hud-focus);
+  background: var(--hud-quiet);
+  font-size: 13px;
+
+  span { color: var(--hud-muted); }
+}
+
+.polis-step-error { border-left-color: var(--hud-danger); }
+
+.polis-field {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0 8px;
+  font-weight: 600;
+  font-size: 13px;
+
+  textarea {
+    padding: 8px 10px;
+    border: 1px solid var(--hud-line);
+    border-radius: 3px;
+    background: var(--hud-field);
+    color: var(--hud-ink);
+    font: 400 14px var(--font-text);
+    resize: vertical;
+  }
+}
+
+/* Fase 4: Archivo y Faro */
+.polis-run {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--hud-line);
+
+  p { margin: 0; font-size: 13px; }
+}
+
+.polis-table {
+  width: 100%;
+  margin: 6px 0 10px;
+  border-collapse: collapse;
+  font-size: 13px;
+
+  th,
+  td {
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--hud-line);
+    text-align: left;
+  }
+
+  th { color: var(--hud-muted); font: 600 11px var(--font-mono); text-transform: uppercase; }
+}
+
+.polis-health {
+  margin: 6px 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+
+  li { padding: 3px 0; }
+
+  [data-health='degraded'] { color: var(--hud-warn); }
+  [data-health='down'] { color: var(--hud-danger); }
+  [data-health='disabled'],
+  [data-health='simulated'] { color: var(--hud-muted); }
+}

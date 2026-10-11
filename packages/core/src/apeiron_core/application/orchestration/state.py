@@ -14,10 +14,13 @@ class ApeironInput(TypedDict, total=False):
     question: str
     mode: Mode
     max_rounds: int
+    agent: str  # interlocutor elegido por el usuario: fuerza el modo `single` (ADR-013)
+    participants: list[str]  # convocados por el usuario (incluido `human`): fuerza el modo `debate`
+    open_ended: bool  # sin rondas fijas: cierra el usuario, el tiempo o un tope duro
 
 
 class ApeironState(ApeironInput, total=False):
-    participants: list[str]
+    close_reason: str  # por qué cerró la deliberación antes de agotar las rondas
     round: int
     speaker: int  # índice del worker activo dentro de `participants`
     turns: Annotated[list[AgentTurn], operator.add]

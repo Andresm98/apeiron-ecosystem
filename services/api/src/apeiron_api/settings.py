@@ -66,9 +66,17 @@ class Settings(BaseSettings):
     # Guardrails deterministas (ADR-011): inyección, secretos/PII, fuga del Thought y citas
     # no respaldadas por la evidencia. 0 tokens; también se aplican en simulación.
     guardrails_enabled: bool = True
-    debate_participants: list[str] = Field(
-        default_factory=lambda: ["anaximandro", "heraclito"], min_length=1, max_length=4
-    )
+    # Hasta 6 participantes (cinco workers más el humano en una sesión; ADR-013). Vacío = los agentes cuyo
+    # manifiesto declara `debate = true` (ADR-013, catálogo de agentes); hoy, dos: coste acotado.
+    debate_participants: list[str] = Field(default_factory=list, max_length=6)
+    # Sesiones deliberativas de la Polis (ADR-013, fase 2): topes duros por sesión y límites por usuario.
+    session_max_llm_calls: int = Field(default=60, ge=1, le=300)
+    session_max_duration_s: int = Field(default=1800, ge=60, le=3600)
+    session_max_active_per_user: int = Field(default=3, ge=1, le=10)
+    session_ttl_s: int = Field(default=3600, ge=60, le=86_400)
+    # Sesiones durables (fase 5): diario y checkpoints en SQLite; sobreviven a un reinicio de la API. Vacío = en
+    # memoria. Los checkpoints van al mismo nombre con sufijo `-checkpoints`.
+    sessions_db_path: str = ""
 
     vector_backend: str = "memory"  # memory | chroma
     chroma_host: str = "chroma"

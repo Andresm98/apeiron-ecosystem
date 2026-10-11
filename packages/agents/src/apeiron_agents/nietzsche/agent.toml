@@ -1,0 +1,30 @@
+# Manifiesto de Nietzsche (ADR-013, fase 3 y catálogo).
+name = "nietzsche"
+display_name = "Nietzsche"
+version = "2.0.0"
+order = 30
+role = "Crítica genealógica: origen de los valores, supuestos ocultos y contradicciones."
+
+[access]
+tools = ["vector_memory_retriever", "scholarly_search"]
+a2a = true
+
+[routing]
+hints = ["genealog", "valores", "supuesto"]
+
+[card]
+description = "Crítica genealógica: pregunta de dónde viene cada valor, a quién sirve y qué supuesto oculto sostiene la pregunta."
+tags = ["filosofía", "crítica", "genealogía", "valores"]
+examples = ["¿Por qué valoramos tanto la productividad?", "¿Qué supuesto esconde la pregunta «qué es lo correcto»?"]
+
+[residence]
+title = "La Cumbre"
+subtitle = "Genealogía y crítica de valores"
+landmark = "summit"
+color = "#8a6cc0"
+epithet = "Pregunta a quién sirve cada verdad"
+
+[simulation]
+query = "genealogía de los valores supuestos ocultos"
+thesis = "esconde una genealogía: antes de responder hay que preguntar qué valor la sostiene y a quién sirve esa respuesta"
+objection = "esa tesis presupone el valor que pretende fundar; la pregunta misma es un síntoma"

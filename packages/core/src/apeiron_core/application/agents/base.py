@@ -23,8 +23,8 @@ def dialogue_block(name: str, history: list[AgentTurn]) -> str:
     return (
         "\n\nTu interlocutor acaba de sostener:\n"
         f"{positions}\n"
-        "Respóndele directamente: reconoce un acuerdo, formula tu objeción principal "
-        "y aporta tu tesis sin repetir lo ya dicho."
+        "Respóndele directamente desde tu función y con tu propia forma: no adoptes su estructura "
+        "ni repitas su conclusión; muestra lo que su posición no ve desde tu método."
     )
 
 

@@ -17,7 +17,8 @@ from apeiron_core.application.dto.runs import AgentRun
 
 SUMMARY_COLUMNS = "id,created_at,question,mode,simulate,status,usage,model,duration_ms,channel,a2a_task_id,guardrails"
 EXECUTIONS = (
-    "agent_executions(agent_id,invocations,reasoning_steps,tool_calls,tools_used,degraded,duration_ms)"
+    "agent_executions(agent_id,invocations,reasoning_steps,tool_calls,tools_used,degraded,duration_ms,"
+    "llm_calls,input_tokens,output_tokens)"
 )
 
 

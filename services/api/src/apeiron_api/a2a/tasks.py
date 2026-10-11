@@ -127,12 +127,13 @@ async def run_task(
     mode: Any,
     max_rounds: int | None,
     simulate: bool,
+    agent: str | None = None,
 ) -> None:
     """Ejecuta el grafo para la tarea. Corre en su propia asyncio.Task: sobrevive al cliente."""
-    task.set_status(wire.WORKING, "Ápeiron coordina a los workers")
+    task.set_status(wire.WORKING, f"{agent} razona" if agent else "Ápeiron coordina a los workers")
     try:
         final, answer = wire.COMPLETED, ""
-        async for event in facade.stream(question, mode, max_rounds, simulate):
+        async for event in facade.stream(question, mode, max_rounds, simulate, agent):
             if event.type == "trace":
                 for message in event.data["messages"]:
                     task.set_status(wire.WORKING, message)

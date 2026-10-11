@@ -3,7 +3,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from apeiron_api.container import Container
@@ -28,13 +28,20 @@ async def agents(
     return c.topology
 
 
+def _check_agent(body: ChatRequest, c: Container) -> None:
+    """El interlocutor debe existir en la topología publicada (incluye los remotos A2A)."""
+    if body.agent is not None and body.agent not in {a["name"] for a in c.topology["agents"]}:
+        raise HTTPException(status_code=422, detail=f"agente desconocido: {body.agent}")
+
+
 @router.post("/chat")
 async def chat(
     body: ChatRequest,
     _: Annotated[str, Depends(enforce_chat_rate)],
     c: Annotated[Container, Depends(get_container)],
 ) -> ChatResponse:
-    out = await c.facade.ask(body.question, body.mode, body.max_rounds, body.simulate)
+    _check_agent(body, c)
+    out = await c.facade.ask(body.question, body.mode, body.max_rounds, body.simulate, body.agent)
     return ChatResponse(
         answer=out["answer"],
         mode=out["mode"],
@@ -50,13 +57,14 @@ async def chat_stream(
     _: Annotated[str, Depends(enforce_chat_rate)],
     c: Annotated[Container, Depends(get_container)],
 ) -> StreamingResponse:
+    _check_agent(body, c)
     ctx = request_ctx.get()  # incluye user_id fijado por la dependencia
 
     async def events() -> AsyncIterator[str]:
         request_ctx.set(ctx)
         try:
             async for ev in c.facade.stream(
-                body.question, body.mode, body.max_rounds, body.simulate
+                body.question, body.mode, body.max_rounds, body.simulate, body.agent
             ):
                 yield sse(ev.type, ev.data)
         except Exception:

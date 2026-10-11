@@ -2,16 +2,17 @@
 include_external_packages = True
 root_packages =
     apeiron_core
+    apeiron_agents
     apeiron_infra
     apeiron_api
     apeiron_mcp_scholar
 
 [importlinter:contract:layers]
-name = Capas: api -> infra -> core (nunca al revés)
+name = Capas: api -> infra | agents -> core (nunca al revés)
 type = layers
 layers =
     apeiron_api
-    apeiron_infra
+    apeiron_infra | apeiron_agents
     apeiron_core
 
 [importlinter:contract:core-is-vendor-free]
@@ -54,3 +55,12 @@ forbidden_modules =
     apeiron_core
     apeiron_infra
     apeiron_api
+
+[importlinter:contract:agents-are-data]
+name = El catálogo de agentes solo declara datos: no conoce adaptadores ni LangGraph (ADR-013, catálogo de agentes)
+type = forbidden
+source_modules = apeiron_agents
+forbidden_modules =
+    apeiron_infra
+    apeiron_api
+    langgraph

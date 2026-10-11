@@ -10,6 +10,7 @@
 
     <nav class="top-nav" aria-label="Secciones">
       <a routerLink="/" aria-current="page" class="top-nav-active">Consola</a>
+      <a routerLink="/polis">Polis</a>
       <a routerLink="/sistema">Sistema</a>
     </nav>
 
@@ -255,7 +256,7 @@
 
       <div class="trace-status">
         <span class="status-dot" [class.status-dot-muted]="state.status() !== 'running'"></span>
-        <span>{{ state.status() === 'running' ? 'En ejecución' : state.status() === 'done' ? 'Completado' : state.status() === 'error' ? 'Con errores' : 'En espera' }}</span>
+        <span>{{ state.status() === 'running' ? 'En ejecución' : state.status() === 'done' ? 'Completado' : state.status() === 'error' ? 'Con errores' : state.status() === 'cancelled' ? 'Cancelada' : 'En espera' }}</span>
       </div>
     </aside>
   </div>

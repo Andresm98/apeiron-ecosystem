@@ -1,7 +1,7 @@
-import { Component, input } from '@angular/core';
+import { Component, inject, input } from '@angular/core';
+import { AgentDirectory } from '../../application/agent-directory';
 import { AgentStep, Turn } from '../../domain/chat';
 import { excerpt } from '../../domain/dialogue';
-import { agentLabel } from '../agent-label';
 
 /** Intervención de un worker: a quién responde, qué dijo y con qué evidencia. */
 @Component({
@@ -18,6 +18,6 @@ export class TurnCardComponent {
   /** Worker externo vía A2A: su evidencia vive en el otro agente. */
   readonly remote = input(false);
 
-  readonly agentLabel = agentLabel;
+  readonly agentLabel = inject(AgentDirectory).label;
   readonly excerpt = excerpt;
 }

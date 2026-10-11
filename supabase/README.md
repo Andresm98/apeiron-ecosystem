@@ -10,6 +10,8 @@ El esquema de Postgres se gestiona **solo con migraciones** de la Supabase CLI
 | `20261005120000_run_guardrails.sql` | ADR-011: estado `blocked` en `agent_runs.status`, columna `agent_runs.guardrails` (veredictos sin texto) y `record_agent_run()` actualizada para guardarla |
 | `20261005130000_a2a_channel.sql` | ADR-011: `agent_runs.channel` (`web`/`a2a`) y `agent_runs.a2a_task_id`, `kind='remote'` en el catálogo `agents` y `record_agent_run()` con canal. Cada despliegue con workers remotos añade sus filas en `agents` con una migración propia |
 | `20261005140000_scholarly_tool.sql` | ADR-011: añade `scholarly_search` (MCP académico) a las herramientas de `anaximandro` y `heraclito` en el catálogo |
+| `20261011120000_polis_sessions.sql` | ADR-013 (fases 2 a 4): `kind='human'` y filas `human`, `nietzsche`, `feynman` y `epicuro` en `agents`; canal `session`, columnas `agent_runs.config` (configuración de la deliberación) y `agent_runs.events` (cronología pública para el replay); `llm_calls`, `input_tokens` y `output_tokens` en `agent_executions`; `record_agent_run()` actualizada |
+| `20261011120001_agents_catalog.sql` | ADR-013 (catálogo de agentes): **generada** desde `packages/agents` con `python -m apeiron_agents migration`; upsert de los cinco workers (roles de las personas v2) y `active = false` para los que ya no tienen carpeta. No se edita a mano: `test_catalog.py` compara su huella con los manifiestos |
 
 ## Uso con el proyecto en la nube
 

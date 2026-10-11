@@ -7,31 +7,19 @@ que la simulación demuestre la mecánica agéntica con datos reales del grafo:
   2. cita esa evidencia en su respuesta;
   3. si hay interlocutor, cita su tesis y le objeta desde su escuela;
   4. como moderador, contrasta las tesis del transcript.
+
+No conoce a ningún agente: la postura de cada uno (`query`, `thesis`, `objection`) y su nombre visible llegan
+de su manifiesto (ADR-013, catálogo de agentes). Un agente sin postura usa `DEFAULT_STANCE`.
 """
 
 import asyncio
 import re
+from collections.abc import Mapping
 
 from apeiron_core.application.usage import record_usage
 
 DEMO_TOOL = "vector_memory_retriever"
 
-STANCES = {
-    "anaximandro": {
-        "query": "Anaximandro ápeiron indeterminado principio de los opuestos",
-        "thesis": "se explica desde el ápeiron: un fondo indeterminado del que surgen los "
-        "opuestos y al que regresan, pagando su injusticia según el orden del tiempo",
-        "objection": "un flujo sin fondo no explica de dónde surgen los opuestos; el cambio "
-        "necesita un principio ilimitado que lo preceda",
-    },
-    "heraclito": {
-        "query": "Heráclito todo fluye logos tensión de opuestos",
-        "thesis": "se explica desde el devenir: todo fluye y lo real es la tensión de opuestos "
-        "medida por el logos, no una reserva inmóvil",
-        "objection": "un fondo indeterminado no explica nada; la unidad está en la lucha "
-        "misma de los contrarios, como en el arco y la lira",
-    },
-}
 DEFAULT_STANCE = {
     "query": "",
     "thesis": "admite una lectura filosófica precisa",
@@ -45,19 +33,6 @@ _COMMAND_RE = re.compile(r"^\s*(debate|contrasta|compara)\s*:\s*", re.I)
 _SIM_RE = re.compile(r"\[simulación\]\s*")
 _CLAIM_PREFIX_RE = re.compile(r"^Sostengo que «[^»]*»\s*")
 _PERSONA_RE = re.compile(r"\beres ([a-z][a-z0-9_]+)")
-
-
-def _speaker(system: str) -> str:
-    lowered = system.lower()
-    if "moderador" in lowered:
-        return "moderador"
-    if "eres anaximandro" in lowered:
-        return "anaximandro"
-    if "eres heráclito" in lowered or "eres heraclito" in lowered:
-        return "heraclito"
-    # Cualquier otro worker (p. ej. el sustituto simulado de un agente A2A remoto).
-    persona = _PERSONA_RE.search(lowered)
-    return persona.group(1) if persona else "moderador"
 
 
 def _excerpt(text: str, limit: int = 110) -> str:
@@ -84,27 +59,52 @@ def _evidence(user: str) -> str:
     return _excerpt(re.sub(r"^\[source=\w+\]\s*", "", first), 150)
 
 
-def _label(agent: str) -> str:
-    return "Heráclito" if agent == "heraclito" else agent.capitalize()
-
-
 class FakeLLM:
-    """`pace_s` añade una pausa por llamada para que la UI muestre el grafo avanzando."""
+    """`pace_s` añade una pausa por llamada para que la UI muestre el grafo avanzando.
 
-    def __init__(self, pace_s: float = 0.0) -> None:
+    `stances` y `labels` (nombre -> postura / nombre visible) salen del catálogo de agentes.
+    """
+
+    def __init__(
+        self,
+        pace_s: float = 0.0,
+        stances: Mapping[str, Mapping[str, str]] | None = None,
+        labels: Mapping[str, str] | None = None,
+    ) -> None:
         self._pace_s = pace_s
+        self._stances = dict(stances or {})
+        self._labels = {"human": "el ciudadano", **(labels or {})}
+        # «Eres Heráclito» -> heraclito: el nombre visible identifica al hablante en su persona.
+        self._personas = {f"eres {label.casefold()}": name for name, label in (labels or {}).items()}
+
+    def _speaker(self, system: str) -> str:
+        lowered = system.casefold()
+        for marker, name in self._personas.items():
+            if marker in lowered:
+                return name
+        if "moderador" in lowered:
+            return "moderador"
+        # Cualquier otro worker (p. ej. el sustituto simulado de un agente A2A remoto).
+        persona = _PERSONA_RE.search(lowered)
+        return persona.group(1) if persona else "moderador"
+
+    def _label(self, agent: str) -> str:
+        return self._labels.get(agent, agent.capitalize())
+
+    def _stance(self, agent: str) -> Mapping[str, str]:
+        return self._stances.get(agent) or DEFAULT_STANCE
 
     async def complete(self, system: str, user: str) -> str:
         record_usage()
         if self._pace_s:
             await asyncio.sleep(self._pace_s)
-        speaker = _speaker(system)
+        speaker = self._speaker(system)
         if speaker == "moderador":
             return self._synthesis(user)
         if "Action Input:" not in system:  # worker sin tools: respuesta directa
             return self._answer(speaker, user)
         if DEMO_TOOL in system and "Observation:" not in user:
-            query = f"{STANCES.get(speaker, DEFAULT_STANCE)['query']} {_topic(user)}".strip()
+            query = f"{self._stance(speaker)['query']} {_topic(user)}".strip()
             return (
                 "Thought: busco evidencia antes de tomar posición\n"
                 f"Action: {DEMO_TOOL}\nAction Input: {query}"
@@ -112,30 +112,28 @@ class FakeLLM:
         answer = self._answer(speaker, user)
         return f"Thought: tengo evidencia y la posición del otro\nFinal Answer: {answer}"
 
-    @staticmethod
-    def _answer(speaker: str, user: str) -> str:
-        stance = STANCES.get(speaker, DEFAULT_STANCE)
+    def _answer(self, speaker: str, user: str) -> str:
+        stance = self._stance(speaker)
         parts = [f"[simulación] Sostengo que «{_topic(user)}» {stance['thesis']}."]
         if evidence := _evidence(user):
             parts.append(f"Evidencia recuperada ({DEMO_TOOL}): «{evidence}».")
         if other := _INTERLOCUTOR_RE.search(user):
             parts.append(
-                f"Respondo a {_label(other.group('agent'))}: cuando afirma que "
-                f"{_claim(other.group('text'))}, coincido en que los opuestos se ordenan, "
+                f"Respondo a {self._label(other.group('agent'))}: cuando afirma que "
+                f"{_claim(other.group('text'))}, reconozco lo que aporta, "
                 f"pero objeto que {stance['objection']}."
             )
         return " ".join(parts)
 
-    @staticmethod
-    def _synthesis(transcript: str) -> str:
+    def _synthesis(self, transcript: str) -> str:
         positions: dict[str, str] = {}
         for match in _TRANSCRIPT_RE.finditer(transcript):
             positions.setdefault(match.group("agent"), match.group("text"))
         if not positions:
             return f"[simulación] Síntesis de Ápeiron sobre: {_excerpt(transcript, 120)}"
-        summary = "; ".join(f"{_label(a)} sostuvo que {_claim(t)}" for a, t in positions.items())
-        return (
-            f"[simulación] Síntesis de Ápeiron. {summary}. "
-            "Coinciden en que los opuestos no son caos sino un orden; difieren en el fundamento: "
-            "un principio indeterminado previo (ápeiron) frente al devenir medido por el logos."
+        summary = "; ".join(f"{self._label(a)} sostuvo que {_claim(t)}" for a, t in positions.items())
+        closing = (
+            f"Son {len(positions)} perspectivas distintas sobre la misma pregunta; ninguna la agota y "
+            "cada una señala lo que las demás dejan sin examinar."
         )
+        return f"[simulación] Síntesis de Ápeiron. {summary}. {closing}"

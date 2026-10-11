@@ -9,7 +9,7 @@ import { Mode } from '../../domain/chat';
 import { RunSummary } from '../../domain/run-record';
 import { AgentGraphComponent } from '../agent-graph/agent-graph.component';
 import { TurnCardComponent } from '../turn-card/turn-card.component';
-import { agentLabel } from '../agent-label';
+import { AgentDirectory } from '../../application/agent-directory';
 import { excerpt, pendingSteps, repliedTurn, stepsOfTurn } from '../../domain/dialogue';
 import { describeGuard } from '../../domain/guardrails';
 
@@ -26,7 +26,7 @@ export class WorkspacePage implements OnInit {
   readonly caseStudies = CASE_STUDIES;
   readonly selectedCaseId = signal(CASE_STUDIES[0]?.id ?? 1);
   readonly submittedQuestion = signal('');
-  readonly agentLabel = agentLabel;
+  readonly agentLabel = inject(AgentDirectory).label;
   readonly excerpt = excerpt;
   readonly describeGuard = describeGuard;
   readonly stepsOfTurn = stepsOfTurn;
@@ -42,11 +42,11 @@ export class WorkspacePage implements OnInit {
 
   readonly model = computed(() => this.state.topology()?.llm.model ?? 'LLM configurado');
   readonly agentNames = computed(
-    () => this.state.topology()?.agents.map((a) => agentLabel(a.name)).join(' · ') ?? 'Anaximandro · Heráclito',
+    () => this.state.topology()?.agents.map((a) => this.agentLabel(a.name)).join(' · ') ?? 'cargando agentes…',
   );
 
   readonly debateLabel = computed(
-    () => this.state.topology()?.debate_participants.map(agentLabel).join(' ⇄ ') ?? 'Anaximandro ⇄ Heráclito',
+    () => this.state.topology()?.debate_participants.map((a) => this.agentLabel(a)).join(' ⇄ ') ?? '…',
   );
   private readonly remoteAgents = computed(
     () => new Set(this.state.topology()?.agents.filter((a) => a.kind === 'remote').map((a) => a.name) ?? []),

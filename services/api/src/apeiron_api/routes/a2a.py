@@ -2,7 +2,10 @@
 
 La Agent Card es pública; el endpoint exige el mismo Bearer que la API, así que la tarea
 corre con la identidad, el RLS y el rate limit del usuario. Con `APEIRON_A2A_SERVER_ENABLED`
-desactivado ambas rutas responden 404.
+desactivado todas las rutas responden 404.
+
+Además de Ápeiron (`/a2a`), cada agente del catálogo con `a2a = true` tiene card y endpoint propios
+(`/a2a/agents/<nombre>`, ADR-013, catálogo de agentes): la tarea es una consulta `single` a ese agente.
 """
 
 import asyncio
@@ -18,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
 
-from apeiron_api.a2a.card import agent_card
+from apeiron_api.a2a.card import AGENTS_PATH, agent_card, worker_card
 from apeiron_api.a2a.tasks import END, A2ATask, run_task
 from apeiron_api.container import Container
 from apeiron_api.deps import current_user, get_container
@@ -45,7 +48,22 @@ def _enabled(c: Container) -> None:
 @router.get(wire.CARD_PATH)
 async def card(request: Request, c: Annotated[Container, Depends(get_container)]) -> dict[str, Any]:
     _enabled(c)
-    return agent_card(c.settings, c.topology, str(request.base_url))
+    return agent_card(c.settings, c.topology, str(request.base_url), c.catalog.values())
+
+
+def _published(c: Container, name: str) -> str:
+    _enabled(c)
+    spec = c.catalog.get(name)
+    if spec is None or not spec.a2a:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "agente no publicado por A2A")
+    return spec.name
+
+
+@router.get(f"{AGENTS_PATH}/{{name}}{wire.CARD_PATH}")
+async def worker_agent_card(
+    name: str, request: Request, c: Annotated[Container, Depends(get_container)]
+) -> dict[str, Any]:
+    return worker_card(c.settings, c.catalog[_published(c, name)], str(request.base_url))
 
 
 def _hops(meta: dict[str, Any]) -> int:
@@ -53,7 +71,7 @@ def _hops(meta: dict[str, Any]) -> int:
     return min(max(value, 0), 10) if isinstance(value, int) else 0
 
 
-def _chat_request(params: dict[str, Any]) -> tuple[ChatRequest, dict[str, Any], int]:
+def _chat_request(params: dict[str, Any], agent: str | None = None) -> tuple[ChatRequest, dict[str, Any], int]:
     msg = params.get("message")
     if not isinstance(msg, dict):
         raise RpcError(wire.INVALID_PARAMS, "falta params.message")
@@ -63,9 +81,10 @@ def _chat_request(params: dict[str, Any]) -> tuple[ChatRequest, dict[str, Any], 
     try:
         req = ChatRequest(
             question=wire.text_of(msg.get("parts")),
-            mode=meta.get("mode"),
-            max_rounds=meta.get("maxRounds"),
+            mode=None if agent else meta.get("mode"),  # el endpoint de un agente siempre es `single`
+            max_rounds=None if agent else meta.get("maxRounds"),
             simulate=bool(meta.get("simulate", False)),
+            agent=agent,
         )
     except ValidationError:
         raise RpcError(
@@ -75,10 +94,10 @@ def _chat_request(params: dict[str, Any]) -> tuple[ChatRequest, dict[str, Any], 
     return req, msg, _hops(meta)
 
 
-def _start(c: Container, user: str, params: dict[str, Any], *, stream: bool) -> A2ATask:
+def _start(c: Container, user: str, params: dict[str, Any], *, stream: bool, agent: str | None = None) -> A2ATask:
     if not c.limiter.allow(f"chat:{user}", c.settings.chat_rate_limit_per_min):
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "rate_limited")
-    req, msg, hops = _chat_request(params)
+    req, msg, hops = _chat_request(params, agent)
     ctx = request_ctx.get()
     task = A2ATask(
         id=uuid.uuid4().hex,
@@ -99,7 +118,7 @@ def _start(c: Container, user: str, params: dict[str, Any], *, stream: bool) -> 
     if stream:
         task.subscribers.append(asyncio.Queue())  # suscrito antes de arrancar: no pierde eventos
     task.runner = asyncio.create_task(
-        run_task(task, c.facade, req.question, req.mode, req.max_rounds, req.simulate),
+        run_task(task, c.facade, req.question, req.mode, req.max_rounds, req.simulate, req.agent),
         name=f"a2a:{task.id}",
         context=isolated,
     )
@@ -128,11 +147,13 @@ def _stream(request_id: Any, task: A2ATask) -> StreamingResponse:
     )
 
 
-async def _dispatch(c: Container, user: str, request_id: Any, method: str, params: dict[str, Any]) -> Any:
+async def _dispatch(
+    c: Container, user: str, request_id: Any, method: str, params: dict[str, Any], agent: str | None = None
+) -> Any:
     if method == "SendStreamingMessage":
-        return _stream(request_id, _start(c, user, params, stream=True))
+        return _stream(request_id, _start(c, user, params, stream=True, agent=agent))
     if method == "SendMessage":
-        task = _start(c, user, params, stream=False)
+        task = _start(c, user, params, stream=False, agent=agent)
         if not (params.get("configuration") or {}).get("returnImmediately") and task.runner:
             await asyncio.shield(task.runner)  # si el cliente corta, la tarea continúa
         return {"task": task.to_dict()}
@@ -157,6 +178,20 @@ async def a2a(
     c: Annotated[Container, Depends(get_container)],
 ) -> Any:
     _enabled(c)
+    return await _rpc(request, user, c)
+
+
+@router.post(f"{AGENTS_PATH}/{{name}}")
+async def a2a_worker(
+    name: str,
+    request: Request,
+    user: Annotated[str, Depends(current_user)],
+    c: Annotated[Container, Depends(get_container)],
+) -> Any:
+    return await _rpc(request, user, c, _published(c, name))
+
+
+async def _rpc(request: Request, user: str, c: Container, agent: str | None = None) -> Any:
     request_id: Any = None
     try:
         if not wire.supports_version(request.headers.get(wire.VERSION_HEADER)):
@@ -171,7 +206,7 @@ async def a2a(
         params = body.get("params") or {}
         if not isinstance(params, dict):
             raise RpcError(wire.INVALID_PARAMS, "params debe ser un objeto")
-        result = await _dispatch(c, user, request_id, body["method"], params)
+        result = await _dispatch(c, user, request_id, body["method"], params, agent)
     except RpcError as exc:
         return JSONResponse(wire.rpc_error(request_id, exc.code, exc.message))
     if isinstance(result, StreamingResponse):

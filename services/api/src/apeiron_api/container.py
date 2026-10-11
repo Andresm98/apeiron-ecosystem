@@ -4,27 +4,30 @@ import os
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Protocol
 
 import httpx
+from langgraph.checkpoint.memory import InMemorySaver
 
+from apeiron_agents import load_catalog
 from apeiron_api.a2a.tasks import A2ATaskStore
 from apeiron_api.settings import RemoteAgentConfig, Settings
-from apeiron_core.application.agents.factories import (
-    AnaximandroFactory,
-    HeraclitoFactory,
-    RemoteAgentFactory,
-)
+from apeiron_core.application.agents.factories import RemoteAgentFactory, SpecAgentFactory
 from apeiron_core.application.agents.registry import AgentRegistry
 from apeiron_core.application.guardrails import RuleGuardrails
 from apeiron_core.application.metrics import RuntimeMetrics
+from apeiron_core.application.orchestration.control import HUMAN, MAX_PARTICIPANTS
 from apeiron_core.application.orchestration.graph import build_graph
 from apeiron_core.application.ports.inbound.chat import ChatUseCasePort
 from apeiron_core.application.ports.outbound.llm import LLMPort
 from apeiron_core.application.ports.outbound.memory import VectorStorePort
 from apeiron_core.application.ports.outbound.runs import RunRepositoryPort
+from apeiron_core.application.ports.outbound.sessions import SessionJournalPort
 from apeiron_core.application.ports.outbound.tools import ToolPort
 from apeiron_core.application.use_cases.chat import ApeironFacade
+from apeiron_core.application.use_cases.deliberation import DeliberationService
+from apeiron_core.domain.entities.agent_spec import AgentSpec
 from apeiron_infra.a2a.client import A2AClient, A2ARemoteAgent
 from apeiron_infra.llm.fake import FakeLLM
 from apeiron_infra.llm.langchain_llm import LangChainLLM
@@ -36,6 +39,7 @@ from apeiron_infra.memory.vector import (
 )
 from apeiron_infra.observability.langsmith import configure_langsmith
 from apeiron_infra.observability.logging import configure_logging
+from apeiron_infra.persistence.sessions import SqliteSessionJournal, open_sqlite_checkpointer
 from apeiron_infra.persistence.supabase_runs import SupabaseRunRepository
 from apeiron_infra.resilience import CircuitBreaker
 from apeiron_infra.security.rate_limit import SlidingWindowLimiter
@@ -69,12 +73,43 @@ class Container:
     remotes: dict[str, A2ARemoteAgent] = field(default_factory=dict)
     probes: dict[str, Callable[[], Awaitable[Any]]] = field(default_factory=dict)
     a2a_tasks: A2ATaskStore = field(default_factory=A2ATaskStore)
+    sessions: DeliberationService | None = None  # deliberaciones de la Polis (ADR-013, fase 2)
+    catalog: dict[str, AgentSpec] = field(default_factory=dict)  # manifiestos de los agentes locales (ADR-013)
+    closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)  # recursos que cerrar al parar
+
+    async def aclose(self) -> None:
+        """Parada ordenada: las sesiones abiertas quedan dormidas en el diario; luego se cierran los recursos."""
+        if self.sessions is not None:
+            await self.sessions.shutdown()
+        for close in self.closers:
+            await close()
+        await self.http.aclose()
     started_at: float = field(default_factory=time.time)
+
+
+# Herramientas que el sistema sabe construir: el acceso que declara un manifiesto debe salir de aquí.
+KNOWN_TOOLS = frozenset(
+    {FormalLogicCalculator.name, McpPublicApiTool.name, VectorMemoryRetriever.name, ScholarlySearchTool.name}
+)
+
+
+def agent_catalog() -> list[AgentSpec]:
+    """Catálogo de agentes locales (ADR-013, catálogo de agentes): una carpeta por agente en `packages/agents`."""
+    specs = load_catalog()
+    for spec in specs:
+        if unknown := set(spec.tools) - KNOWN_TOOLS:
+            raise ValueError(f"el agente {spec.name!r} declara tools desconocidas: {sorted(unknown)}")
+    return specs
 
 
 def _build_llm(s: Settings, simulate: bool = False, breaker: CircuitBreaker | None = None) -> LLMPort:
     if simulate or s.llm_provider == "fake":
-        return FakeLLM(pace_s=s.simulation_pace_s if simulate else 0.0)
+        catalog = agent_catalog()
+        return FakeLLM(
+            pace_s=s.simulation_pace_s if simulate else 0.0,
+            stances={spec.name: spec.simulation for spec in catalog},
+            labels={spec.name: spec.display_name for spec in catalog},
+        )
 
     def chat_model(model: str) -> LangChainLLM:
         return LangChainLLM(
@@ -142,9 +177,9 @@ def build_remotes(s: Settings, http: httpx.AsyncClient) -> dict[str, A2ARemoteAg
 def _registry(s: Settings, remotes: dict[str, A2ARemoteAgent] | None = None) -> AgentRegistry:
     """`remotes=None` registra sustitutos locales de los agentes A2A (simulación sin red)."""
     registry = AgentRegistry()
-    registry.register(AnaximandroFactory())
-    registry.register(HeraclitoFactory())
-    local = {item["name"] for item in registry.describe()}
+    for spec in agent_catalog():
+        registry.register(SpecAgentFactory(spec))
+    local = set(registry.names)
     for cfg in s.a2a_remote_agents:
         if cfg.name in local:
             raise ValueError(f"el agente remoto {cfg.name!r} colisiona con un worker local")
@@ -183,31 +218,64 @@ def build_apeiron_graph(
     *,
     llm_breaker: CircuitBreaker | None = None,
     remotes: dict[str, A2ARemoteAgent] | None = None,
+    checkpointer: Any = None,
 ) -> Any:
-    """Grafo orquestador Ápeiron; `simulate` usa el LLM determinista y sustitutos locales (0 tokens)."""
+    """Grafo orquestador Ápeiron; `simulate` usa el LLM determinista y sustitutos locales (0 tokens).
+
+    Con `checkpointer` es el grafo de las sesiones deliberativas: incluye al participante humano y puede pausarse.
+    """
     llm = _build_llm(s, simulate, llm_breaker)
     guardrails = RuleGuardrails() if s.guardrails_enabled else None
-    workers = _registry(s, None if simulate else remotes).build_all(
-        llm, tools, s.max_react_steps, s.tool_timeout_s, s.require_evidence, guardrails
-    )
+    registry = _registry(s, None if simulate else remotes)
+    workers = registry.build_all(llm, tools, s.max_react_steps, s.tool_timeout_s, s.require_evidence, guardrails)
     return build_graph(
         workers,
         llm,
         s.default_rounds,
         s.node_timeout_s,
-        debate_participants=s.debate_participants,
+        debate_participants=debate_participants(s, registry),
         guardrails=guardrails,
+        hints=registry.hints(),
+        human=checkpointer is not None,
+        checkpointer=checkpointer,
     )
 
 
+def checkpoints_path(sessions_db_path: str) -> str:
+    path = Path(sessions_db_path)
+    return str(path.with_name(f"{path.stem}-checkpoints{path.suffix or '.db'}"))
+
+
+async def _session_storage(
+    s: Settings,
+) -> tuple[Any, SessionJournalPort | None, list[Callable[[], Awaitable[None]]]]:
+    if not s.sessions_db_path:
+        return InMemorySaver(), None, []
+    saver, close = await open_sqlite_checkpointer(checkpoints_path(s.sessions_db_path))
+    return saver, SqliteSessionJournal(s.sessions_db_path), [close]
+
+
+def debate_participants(s: Settings, registry: AgentRegistry) -> list[str]:
+    """`APEIRON_DEBATE_PARTICIPANTS` si se fija; si no, los agentes que declaran `debate = true`."""
+    return list(s.debate_participants) or registry.debate_defaults() or registry.names[:2]
+
+
 def _topology(s: Settings) -> dict[str, Any]:
+    registry = _registry(s)
     return {
         "orchestrator": "apeiron",
-        "agents": _registry(s).describe(),
-        "debate_participants": s.debate_participants,
+        "agents": registry.describe(),
+        "debate_participants": debate_participants(s, registry),
         "modes": ["single", "debate"],
         "llm": {"provider": s.llm_provider, "model": s.llm_model},
-        "limits": {"default_rounds": s.default_rounds, "max_rounds": 4},
+        "limits": {
+            "default_rounds": s.default_rounds,
+            "max_rounds": 4,
+            "max_participants": MAX_PARTICIPANTS,
+            "session_max_llm_calls": s.session_max_llm_calls,
+            "session_max_duration_s": s.session_max_duration_s,
+        },
+        "human": HUMAN,  # id del participante humano en las sesiones (ADR-013)
     }
 
 
@@ -234,6 +302,21 @@ async def build_container(s: Settings) -> Container:
         model_label=f"{s.llm_provider}:{s.llm_model}",
         metrics=metrics,
     )
+    # Sesiones: grafos con checkpointer y participante humano. Con APEIRON_SESSIONS_DB_PATH, diario y checkpoints
+    # en SQLite (sobreviven a un reinicio); sin él, en memoria y por instancia.
+    saver, journal, closers = await _session_storage(s)
+    sessions = DeliberationService(
+        facade,
+        build_apeiron_graph(s, tools, llm_breaker=breakers["llm"], remotes=remotes, checkpointer=saver),
+        build_apeiron_graph(s, tools, True, checkpointer=saver),
+        saver,
+        RuleGuardrails() if s.guardrails_enabled else None,
+        journal=journal,
+        max_llm_calls=s.session_max_llm_calls,
+        max_duration_s=s.session_max_duration_s,
+        max_active_per_user=s.session_max_active_per_user,
+        ttl_s=s.session_ttl_s,
+    )
     size = getattr(store, "size", None)
     return Container(
         s,
@@ -249,4 +332,7 @@ async def build_container(s: Settings) -> Container:
         breakers=breakers,
         remotes=remotes,
         probes={"memory": size} if size else {},
+        sessions=sessions,
+        closers=closers,
+        catalog={spec.name: spec for spec in agent_catalog()},
     )

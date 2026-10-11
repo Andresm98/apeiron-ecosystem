@@ -1,0 +1,298 @@
+<div class="polis" [class.polis-ready]="ready()" [class.polis-coarse]="coarse()">
+  <div class="polis-stage" #stage aria-label="La Polis de Ápeiron: mundo 3D explorable" role="application"></div>
+
+  <header class="polis-bar">
+    <a class="polis-mark" routerLink="/" aria-label="Ápeiron, consola">
+      <span aria-hidden="true">Α</span>
+      <strong>Polis</strong>
+    </a>
+    <nav class="polis-nav" aria-label="Secciones">
+      <a routerLink="/">Consola</a>
+      <a routerLink="/polis" aria-current="page" class="polis-nav-active">Polis</a>
+      <a routerLink="/sistema">Sistema</a>
+    </nav>
+    <div class="polis-controls">
+      <label class="polis-toggle" title="LLM determinista: recorre el grafo real con 0 tokens">
+        <input type="checkbox" [checked]="polis.simulate()" (change)="polis.simulate.set(!polis.simulate())" />
+        <span>Simulación<span class="polis-wide"> · 0 tokens</span></span>
+      </label>
+      <div class="polis-segment" role="group" aria-label="Calidad gráfica">
+        @for (level of qualityLevels; track level) {
+          <button type="button" [class.on]="quality() === level" [attr.aria-pressed]="quality() === level" (click)="setQuality(level)">{{ qualityLabel[level] }}</button>
+        }
+      </div>
+      <button type="button" class="polis-help-button" (click)="showHelp()" aria-label="Controles y ayuda">?</button>
+      <span class="polis-self">{{ playerName() }}</span>
+    </div>
+  </header>
+
+  @if (!ready() && !fallback()) {
+    <div class="polis-loading" role="status">
+      <span class="polis-loading-mark" aria-hidden="true">Α</span>
+      <p>Fundando la polis…</p>
+    </div>
+  }
+
+  @if (fallback()) {
+    <section class="polis-fallback" aria-labelledby="fallback-title">
+      <h1 id="fallback-title">La Polis necesita WebGL y animación</h1>
+      <p>Tu navegador no puede dibujar el mundo 3D o tienes activado el movimiento reducido. La ejecución es la misma: síguela en el grafo o en la consola.</p>
+      <app-agent-graph [run]="state.graph()" [agents]="state.topology()?.agents" />
+      <a class="polis-button" routerLink="/">Ir a la consola</a>
+    </section>
+  }
+
+  @if (polis.topologyError()) {
+    <section class="polis-failure" role="alert">
+      <p><strong>No se pudo cargar la ciudad.</strong> La API no publicó la topología de agentes.</p>
+      <button type="button" class="polis-button" (click)="polis.retryTopology()">Reintentar</button>
+    </section>
+  }
+
+  @if (ready()) {
+    @if (polis.resumeOffer(); as offer) {
+      <app-polis-resume-banner class="polis-resume" [offer]="offer" (resume)="resume($event)" (dismiss)="polis.dismissResume()" />
+    }
+
+    @if (citizensDock().length) {
+      <app-polis-roster class="polis-roster" [entries]="citizensDock()" [label]="who.bind(this)" [color]="colorOf.bind(this)"
+        (go)="goToCitizen($event)" />
+    }
+
+    @if (showMinimap()) {
+      <app-polis-minimap class="polis-minimap" [places]="polis.places()" [where]="where()" [near]="polis.near()"
+        (expand)="mapOpen.set(true)" />
+    }
+
+    <div class="polis-bottom">
+      <app-polis-chronicle class="polis-chronicle" [entries]="entries()" [status]="chronicleStatus()" [core]="chronicleCore()"
+        [problem]="problem()" [label]="who.bind(this)" [startOpen]="!coarse()" />
+
+      @if (sessionOpen() || polis.gathering()) {
+        <app-polis-turn-bar class="polis-turn" [mode]="turnMode()" [player]="playerName()" [status]="coreText() + '…'"
+          [respondsTo]="polis.session()?.responds_to ? who(polis.session()?.responds_to ?? '') : null"
+          [next]="who(polis.session()?.next ?? '')" [countdown]="turnCountdown()" [progress]="progress()"
+          [notice]="polis.notice()" [busy]="polis.busy()" [closable]="sessionOpen()"
+          (speak)="speak($event)" (pass)="pass()" (advance)="polis.advance()" (close)="polis.closeSession()" (cancel)="polis.cancel()" />
+      }
+    </div>
+
+    @if (polis.nearPlace(); as place) {
+      @if (!polis.selected() && !sessionOpen() && !onboarding()) {
+        <button type="button" class="polis-prompt" (click)="open(place.id)">
+          @if (!coarse()) { <kbd>E</kbd> }
+          {{ verb(place) }} <strong>{{ place.title }}</strong>
+        </button>
+      }
+    }
+
+    @if (coarse() && !onboarding()) {
+      @if (!sessionOpen() && !polis.selected()) {
+        <app-polis-joystick class="polis-joystick" (stick)="stick($event)" />
+      }
+      <div class="polis-touch-actions">
+        <button type="button" (click)="wave()" aria-label="Saludar">Saludar</button>
+        <button type="button" (click)="jump()" aria-label="Saltar">Saltar</button>
+        <button type="button" (click)="mapOpen.set(!mapOpen())" [attr.aria-pressed]="mapOpen()">Mapa</button>
+      </div>
+    }
+
+    @if (perfEnabled && perf(); as p) {
+      <output class="polis-perf" [class.polis-perf-over]="perfProblems().length">
+        {{ p.fps }} fps · {{ p.frameMs }} ms · {{ p.calls }} draw calls · {{ p.triangles }} tri · {{ p.textures }} tex · {{ qualityLabel[p.quality] }}
+        @for (problem of perfProblems(); track $index) { <br />⚠ {{ problem }} }
+      </output>
+    }
+
+    @if (onboarding()) {
+      <app-polis-onboarding class="polis-onboarding" [player]="playerName()" [coarse]="coarse()" (done)="finishOnboarding()" />
+    }
+  }
+
+  <!-- Diálogo del lugar seleccionado -->
+  @if (polis.selectedPlace(); as place) {
+    <aside class="polis-dialog" [attr.aria-label]="place.title" [style.--accent]="place.color">
+      <header>
+        <p class="polis-eyebrow">{{ eyebrow[place.kind] }}</p>
+        <h2>{{ place.title }}</h2>
+        <p class="polis-sub">{{ place.subtitle }}</p>
+        <button type="button" class="polis-close" (click)="close()" aria-label="Cerrar">×</button>
+      </header>
+
+      @switch (place.kind) {
+        @case ('agora') {
+          @if (polis.running() || sessionOpen()) {
+            <p class="polis-status">{{ coreText() }}…</p>
+            <p class="polis-eyebrow">En el ágora</p>
+            <ul class="polis-chips">
+              @for (p of polis.sessionParticipants(); track p) { <li [class.polis-chip-self]="p === human">{{ who(p) }}</li> }
+            </ul>
+            @if (sessionOpen() && invitable().length && polis.sessionParticipants().length < maxParticipants) {
+              <p class="polis-eyebrow">Invitar a la siguiente ronda</p>
+              <div class="polis-chips">
+                @for (a of invitable(); track a) {
+                  <button type="button" class="polis-chip-button" [disabled]="polis.busy()" (click)="invite(a)">+ {{ who(a) }}</button>
+                }
+              </div>
+            }
+            @if (!sessionOpen()) {
+              <button type="button" class="polis-button polis-button-quiet" (click)="polis.cancel()">Detener</button>
+            }
+          } @else {
+            @if (state.answer() && polis.venue()?.kind === 'agora') {
+              <div class="polis-answer">
+                <p class="polis-eyebrow">Síntesis de Ápeiron @if (polis.session()?.reason; as r) { · {{ reasonLabel(r) }} }</p>
+                <p>{{ state.answer() }}</p>
+              </div>
+              <button type="button" class="polis-button polis-button-quiet" (click)="polis.dismiss()">Despedir la asamblea</button>
+            }
+            <app-polis-tribune [draft]="polis.draft()" [citizens]="tribuneCitizens()" [player]="playerName()"
+              [simulate]="polis.simulate()" [estimate]="estimate()" [maxCalls]="polis.maxCalls()" [notice]="polis.notice()"
+              (draftChange)="setDraft($event)" (convene)="convene($event)" />
+          }
+        }
+
+        @case ('tool') {
+          <p>Sirve a: <strong>{{ usersOf(place).map(who.bind(this)).join(' · ') || 'nadie todavía' }}</strong>.</p>
+          <p class="polis-eyebrow">Últimas consultas</p>
+          @for (step of visitsTo(place); track $index) {
+            <p class="polis-step" [class.polis-step-error]="step.error">
+              <strong>{{ who(step.agent) }}</strong> · {{ step.tool }}<br />
+              <span>{{ excerpt(step.input, 120) }}</span>
+            </p>
+          } @empty {
+            <p class="polis-muted">Nadie ha consultado este edificio en la ejecución actual.</p>
+          }
+        }
+
+        @case ('home') {
+          <p>Eres <strong>{{ playerName() }}</strong>, ciudadano de la polis. Acércate a un agente para preguntarle, o ve al ágora para convocar una deliberación en la que puedes tomar la palabra.</p>
+          <button type="button" class="polis-button polis-button-quiet" (click)="showHelp()">Ver los controles</button>
+        }
+
+        @case ('archive') {
+          @if (!polis.historyEnabled()) {
+            <p class="polis-muted">Las crónicas se guardan en Supabase. Con autenticación local no hay historial que reproducir.</p>
+          } @else {
+            @if (polis.replaying()) {
+              <p class="polis-status">Reproduciendo una crónica en la ciudad…</p>
+              @if (polis.replayAgents().length) {
+                <table class="polis-table">
+                  <thead><tr><th>Agente</th><th>Llamadas</th><th>Tokens</th><th>Herramientas</th></tr></thead>
+                  <tbody>
+                    @for (a of polis.replayAgents(); track a.agent_id) {
+                      <tr><td>{{ who(a.agent_id === 'apeiron' ? 'apeiron' : a.agent_id) }}</td><td>{{ a.llm_calls ?? '—' }}</td><td>{{ a.llm_calls === undefined ? '—' : tokensOf(a) }}</td><td>{{ a.tool_calls }}</td></tr>
+                    }
+                  </tbody>
+                </table>
+              }
+              @if (polis.running()) {
+                <button type="button" class="polis-button polis-button-quiet" (click)="polis.cancel()">Detener la crónica</button>
+              }
+            }
+            <p class="polis-eyebrow">Crónicas recientes</p>
+            @for (run of state.history(); track run.id) {
+              <div class="polis-run">
+                <p><strong>{{ excerpt(run.question, 90) }}</strong><br /><span class="polis-muted">{{ runLabel(run) }}</span></p>
+                <button type="button" class="polis-chip-button" [disabled]="polis.running()" (click)="polis.replay(run.id)">Reproducir</button>
+              </div>
+            } @empty {
+              <p class="polis-muted">{{ state.historyError() || 'Aún no hay crónicas.' }}</p>
+            }
+            @if (polis.notice(); as notice) { <p class="polis-notice">{{ notice }}</p> }
+          }
+        }
+
+        @case ('beacon') {
+          @if (polis.system(); as system) {
+            <p class="polis-state" [attr.data-state]="polis.beacon()">{{ polis.beacon() === 'ok' ? 'La polis está sana' : polis.beacon() === 'degraded' ? 'Algún servicio va degradado' : 'Hay servicios caídos' }}</p>
+            <ul class="polis-health">
+              @for (c of system.components; track c.id) {
+                <li [attr.data-health]="c.status"><span aria-hidden="true">{{ healthIcon[c.status] }}</span> {{ c.label }} · {{ healthLabel[c.status] }}</li>
+              }
+            </ul>
+            <p class="polis-muted">
+              {{ system.activity.active_runs }} ejecuciones en curso · {{ system.activity.runs }} desde el arranque
+              @if (system.sessions; as s) { · deliberaciones: {{ (s.counts['running'] ?? 0) + (s.counts['waiting'] ?? 0) }} abiertas }
+            </p>
+          } @else {
+            <p class="polis-muted">El Faro está apagado: no se pudo leer el estado del sistema.</p>
+          }
+          <a class="polis-button polis-button-quiet" routerLink="/sistema">Abrir el observatorio</a>
+        }
+
+        @default {
+          @if (place.agent; as agent) {
+            <p class="polis-state" [attr.data-state]="stateOf(agent)">{{ who(agent) }} · {{ stateText[stateOf(agent)] }}</p>
+            @if (place.epithet) { <p class="polis-epithet">«{{ place.epithet }}»</p> }
+            <p class="polis-eyebrow">Herramientas</p>
+            <ul class="polis-tools">
+              @for (a of polis.agents(); track a.name) {
+                @if (a.name === agent) {
+                  @for (tool of a.tools; track tool) { <li>{{ tool }} <span>· {{ buildingOf(tool) }}</span></li> }
+                }
+              }
+            </ul>
+            @if (polis.lastTurn(agent); as turn) {
+              <div class="polis-answer">
+                <p class="polis-eyebrow">Su última intervención @if (turn.responds_to) { · responde a {{ who(turn.responds_to) }} }</p>
+                <p>{{ turn.text }}</p>
+              </div>
+            }
+            @for (step of polis.stepsOf(agent).slice(-3); track $index) {
+              <p class="polis-step" [class.polis-step-error]="step.error">
+                {{ step.auto ? 'Consulta automática' : 'Consulta' }} · <strong>{{ step.tool }}</strong><br />
+                <span>{{ excerpt(step.observation, 160) }}</span>
+              </p>
+            }
+            @if (sessionOpen()) {
+              @if (!polis.sessionParticipants().includes(agent)) {
+                <button type="button" class="polis-button" [disabled]="polis.busy() || polis.sessionParticipants().length >= maxParticipants" (click)="invite(agent)">Invitar al ágora</button>
+              } @else {
+                <p class="polis-muted">Está deliberando en el ágora.</p>
+              }
+            } @else if (polis.running()) {
+              <button type="button" class="polis-button polis-button-quiet" (click)="polis.cancel()">Detener</button>
+            } @else {
+              <label class="polis-field">
+                <span>Pregúntale a {{ who(agent) }}</span>
+                <textarea rows="3" [(ngModel)]="question" placeholder="Escribe tu pregunta…" (keydown.control.enter)="question.trim() && ask(agent)"></textarea>
+              </label>
+              <button type="button" class="polis-button" [disabled]="!question.trim()" (click)="ask(agent)">Preguntar a {{ who(agent) }}</button>
+            }
+            @if (polis.notice(); as notice) { <p class="polis-notice">{{ notice }}</p> }
+          }
+        }
+      }
+    </aside>
+  }
+
+  <!-- Mapa de la polis: viajar a un lugar -->
+  @if (mapOpen()) {
+    <section class="polis-map" aria-label="Mapa de la polis">
+      <header>
+        <h2>Mapa de la polis</h2>
+        <button type="button" class="polis-close" (click)="mapOpen.set(false)" aria-label="Cerrar mapa">×</button>
+      </header>
+      <svg [attr.viewBox]="mapBox()" role="img" aria-label="Lugares de la polis">
+        @for (place of polis.places(); track place.id) {
+          @if (place.kind !== 'agora') {
+            <line x1="0" y1="0" [attr.x2]="place.x" [attr.y2]="place.z" class="polis-map-bridge" [attr.stroke-width]="bridgeWidth" />
+          }
+        }
+        @for (place of polis.places(); track place.id) {
+          <g class="polis-map-place" (click)="travel(place)" (keydown.enter)="travel(place)" tabindex="0" role="button" [attr.aria-label]="'Viajar a ' + place.title">
+            <circle [attr.cx]="place.x" [attr.cy]="place.z" [attr.r]="place.radius" [attr.fill]="place.color" />
+            <text [attr.x]="place.x" [attr.y]="place.z + place.radius + 4.5">{{ place.title }}</text>
+          </g>
+        }
+        @if (where(); as w) {
+          <g class="polis-map-me" [attr.transform]="'translate(' + w.x + ' ' + w.z + ') rotate(' + w.heading + ')'">
+            <path d="M0 -5 L3.6 3.6 L0 1.8 L-3.6 3.6 Z" />
+          </g>
+        }
+      </svg>
+      <p class="polis-muted">Estás en la flecha dorada. Elige un lugar para viajar hasta él.</p>
+    </section>
+  }
+</div>

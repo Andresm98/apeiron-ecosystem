@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from apeiron_api.a2a.card import API_VERSION
 from apeiron_api.container import Container, build_container
-from apeiron_api.routes import a2a, auth, chat, memory, runs, system
+from apeiron_api.routes import a2a, auth, chat, memory, runs, sessions, system
 from apeiron_api.settings import Settings
 from apeiron_core.application.context import request_ctx
 
@@ -21,7 +21,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         container: Container = await build_container(cfg)
         app.state.container = container
         yield
-        await container.http.aclose()
+        await container.aclose()
 
     app = FastAPI(title="Ápeiron Ecosystem API", version=API_VERSION, lifespan=lifespan)
     app.add_middleware(
@@ -51,4 +51,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(runs.router)
     app.include_router(system.router)
     app.include_router(a2a.router)
+    app.include_router(sessions.router)
     return app

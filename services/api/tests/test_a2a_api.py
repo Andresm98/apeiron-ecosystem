@@ -53,7 +53,28 @@ def test_agent_card_is_public_and_describes_the_interface(client):
     assert interface == {"url": "http://testserver/a2a", "protocolBinding": "JSONRPC", "protocolVersion": "1.0"}
     assert card["capabilities"]["streaming"] is True
     assert card["securitySchemes"]["bearer"]["httpAuthSecurityScheme"]["scheme"] == "Bearer"
-    assert {s["id"] for s in card["skills"]} == {"apeiron_single", "apeiron_debate"}
+    skills = [s["id"] for s in card["skills"]]
+    assert skills[:2] == ["apeiron_single", "apeiron_debate"]
+    assert skills[2:] == ["agent_anaximandro", "agent_heraclito", "agent_nietzsche", "agent_feynman", "agent_epicuro"]
+
+
+def test_each_published_agent_has_its_own_card(client):
+    """ADR-013, catálogo de agentes: cada agente del catálogo con `a2a = true` se anuncia y se invoca por separado."""
+    card = client.get("/a2a/agents/feynman/.well-known/agent-card.json").json()
+    [interface] = card["supportedInterfaces"]
+    assert interface["url"] == "http://testserver/a2a/agents/feynman" and card["name"] == "Feynman"
+    assert card["skills"][0]["id"] == "feynman" and "experimento" in card["skills"][0]["description"]
+    assert card["securitySchemes"]["bearer"]["httpAuthSecurityScheme"]["scheme"] == "Bearer"
+    assert client.get("/a2a/agents/socrates/.well-known/agent-card.json").status_code == 404
+    assert client.post("/a2a/agents/epicuro", json=rpc("GetTask", {"id": "x"})).status_code == 401
+
+
+def test_a_published_agent_answers_alone(client):
+    payload = rpc("SendMessage", send("Debate: ¿compensa el coste?", mode="debate"))  # el modo se ignora
+    task = client.post("/a2a/agents/epicuro", json=payload, headers=login(client)).json()["result"]["task"]
+    assert task["status"]["state"] == "TASK_STATE_COMPLETED"
+    [turn] = next(a for a in task["artifacts"] if a["name"] == "turns")["parts"]
+    assert turn["data"]["agent"] == "epicuro" and "consecuencias" in turn["data"]["text"]
 
 
 def test_a2a_is_disabled_by_default():
@@ -206,6 +227,34 @@ async def test_apeiron_debates_with_a_remote_apeiron_over_a2a():
     simulated = [e async for e in consumer.facade.stream("Debate: ¿qué es el cambio?", "debate", 1, True)]
     assert server.state.container.a2a_tasks.counts() == {"TASK_STATE_COMPLETED": 1}
     assert [e.data["agent"] for e in simulated if e.type == "turn"] == ["anaximandro", "sophos"]
+
+
+async def test_another_apeiron_can_recruit_a_single_agent_over_a2a():
+    """El Feynman de una instancia debate como worker remoto en otra, por su card y endpoint propios."""
+    server = create_app(settings())
+    server.state.container = await build_container(settings())
+    transport = httpx.ASGITransport(app=server)
+    async with httpx.AsyncClient(transport=transport, base_url="http://localhost") as http:
+        await http.post("/v1/auth/register", json={"username": "socio2", "password": "clave-larga-123"})
+        token = (await http.post("/v1/auth/token", data={"username": "socio2", "password": "clave-larga-123"})).json()
+    consumer = await build_container(
+        settings(
+            a2a_server_enabled=False,
+            a2a_allowed_hosts=["localhost"],
+            a2a_remote_agents=[
+                RemoteAgentConfig(name="feynman_remoto", url="http://localhost/a2a/agents/feynman", role="Verifica.")
+            ],
+            debate_participants=["anaximandro", "feynman_remoto"],
+        )
+    )
+    remote = consumer.remotes["feynman_remoto"]
+    remote.client._http = httpx.AsyncClient(transport=transport)
+    remote.client._token = token["access_token"]
+    events = [e async for e in consumer.facade.stream("Debate: ¿qué es el cambio?", "debate", 1, False)]
+    turns = [e.data for e in events if e.type == "turn"]
+    assert [t["agent"] for t in turns] == ["anaximandro", "feynman_remoto"]
+    assert not turns[1]["degraded"] and "mecanismo" in turns[1]["text"]  # respondió Feynman, no la síntesis
+    assert any("feynman_remoto A2A → Feynman" in m for e in events if e.type == "trace" for m in e.data["messages"])
 
 
 async def test_self_delegation_loop_is_cut_by_the_hop_limit():

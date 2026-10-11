@@ -1,4 +1,4 @@
-"""Fábricas de workers: cada agente declara persona, rol y tools permitidas."""
+"""Fábricas de workers: los locales salen de su manifiesto (ADR-013); los remotos, de la configuración A2A."""
 
 from collections.abc import Mapping
 from typing import Protocol
@@ -8,18 +8,7 @@ from apeiron_core.application.ports.outbound.agents import SpecialistAgent
 from apeiron_core.application.ports.outbound.guardrails import GuardrailPort
 from apeiron_core.application.ports.outbound.llm import LLMPort
 from apeiron_core.application.ports.outbound.tools import ToolPort
-
-ANAXIMANDRO_PERSONA = (
-    "Eres Anaximandro. Razonas desde el ápeiron: lo indeterminado e ilimitado, "
-    "fuente de la que surgen y a la que regresan los opuestos. Sé dialéctico y formal. "
-    "Responde en el idioma del usuario."
-)
-HERACLITO_PERSONA = (
-    "Eres Heráclito de Éfeso. Razonas desde el devenir y el logos: todo fluye, la realidad "
-    "es tensión y unidad de opuestos. Eres el contrapunto de Anaximandro: donde él ve un "
-    "fondo indeterminado y estable, tú ves conflicto y cambio regidos por una medida. "
-    "Sé aforístico, directo y polémico; responde en pocas frases y en el idioma del usuario."
-)
+from apeiron_core.domain.entities.agent_spec import AgentSpec
 
 
 class AgentFactory(Protocol):
@@ -55,15 +44,19 @@ def _build(
     )
 
 
-class AnaximandroFactory:
-    name = "anaximandro"
-    role = "Worker principal: tesis desde el ápeiron, lógica formal y evidencia."
-    tools: tuple[str, ...] = (
-        "formal_logic_calculator",
-        "scholarly_search",
-        "mcp_public_api_tool",
-        "vector_memory_retriever",
-    )
+class SpecAgentFactory:
+    """Worker ReAct local construido desde su manifiesto (ADR-013): ningún agente tiene clase propia.
+
+    Las tools del manifiesto son su lista de acceso: el agente solo ve esas, aunque el sistema tenga más.
+    """
+
+    kind = "local"
+
+    def __init__(self, spec: AgentSpec) -> None:
+        self.spec = spec
+        self.name = spec.name
+        self.role = spec.role
+        self.tools = spec.tools
 
     def create(
         self,
@@ -74,43 +67,9 @@ class AnaximandroFactory:
         require_evidence: bool = False,
         guardrails: GuardrailPort | None = None,
     ) -> SpecialistAgent:
+        steps = min(self.spec.max_steps, max_steps) if self.spec.max_steps else max_steps
         return _build(
-            self.name,
-            ANAXIMANDRO_PERSONA,
-            self.tools,
-            llm,
-            tools,
-            max_steps,
-            tool_timeout_s,
-            require_evidence,
-            guardrails,
-        )
-
-
-class HeraclitoFactory:
-    name = "heraclito"
-    role = "Worker dialéctico: replica a Anaximandro desde el devenir y el logos."
-    tools: tuple[str, ...] = ("vector_memory_retriever", "scholarly_search", "mcp_public_api_tool")
-
-    def create(
-        self,
-        llm: LLMPort,
-        tools: Mapping[str, ToolPort],
-        max_steps: int = 4,
-        tool_timeout_s: float = 20.0,
-        require_evidence: bool = False,
-        guardrails: GuardrailPort | None = None,
-    ) -> SpecialistAgent:
-        return _build(
-            self.name,
-            HERACLITO_PERSONA,
-            self.tools,
-            llm,
-            tools,
-            max_steps,
-            tool_timeout_s,
-            require_evidence,
-            guardrails,
+            self.name, self.spec.persona, self.tools, llm, tools, steps, tool_timeout_s, require_evidence, guardrails
         )
 
 

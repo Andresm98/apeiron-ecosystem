@@ -29,7 +29,7 @@ services:
       APEIRON_CHROMA_PORT: "8000"
       APEIRON_SCHOLAR_MCP_URL: http://mcp-scholar:8080/mcp
     volumes:
-      - api-data:/app/data          # usuarios SQLite (APEIRON_USERS_DB_PATH=data/users.db)
+      - api-data:/app/data          # SQLite: usuarios (users.db) y sesiones durables de la Polis (sessions*.db)
       - embedding-models:/home/app/.cache/chroma  # modelo ONNX de Chroma (~80 MB): se descarga una vez
     depends_on:
       chroma:

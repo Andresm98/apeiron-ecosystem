@@ -89,7 +89,16 @@ Abre **http://localhost**:
 4. El panel **Grafo en vivo** ilumina cada nodo mientras se ejecuta y muestra las llamadas LLM, los tokens y el tiempo de la ejecución.
 5. Con Supabase, la pestaña **Historial** del panel izquierdo lista tus ejecuciones guardadas. Haz clic en una para reabrir sus turnos, la síntesis, la traza y el consumo. Las bloqueadas por un guardrail llevan `⊘` y las que llegaron de otro agente, *vía A2A*.
 6. El panel **Guardrails** (debajo del grafo) lista cada intervención de la ejecución: entrada bloqueada, observación saneada, cita sin respaldo… Una pregunta con inyección de instrucciones termina en una tarjeta de rechazo sin llamar al LLM.
-7. La pestaña **Sistema** (`/sistema`) es el observatorio: salud de cada dependencia (LLM, memoria, Supabase, fuentes externas, guardrails, servidor A2A y agentes remotos con su circuit breaker), actividad de la instancia (ejecuciones en curso, estados, canales, tokens, latencia p50/p95, intervenciones por regla), topología local/remota, tareas A2A propias, tu actividad (desde el historial) y tu cupo de rate limit. Se refresca cada 10 s.
+7. La pestaña **Polis** (`/polis`) es el mundo 3D de Ápeiron ([ADR-013](docs/adr/0013-polis-agentic-world.md)). Entras como **ssanax** (tu usuario) en la casa y recorres la ciudad: el **ágora** de Ápeiron en el centro, la morada de cada agente (el Gnomon de Anaximandro, el Fuego y el Río de Heráclito) y los edificios de las herramientas (Biblioteca, el Ábaco, Mnemósine). Junto a un agente, <kbd>E</kbd> abre su diálogo para **preguntarle a él**; en el ágora, la tribuna **convoca un debate**: los convocados caminan hasta allí y, ya reunidos, empieza la deliberación. Todo lo que ves sale de eventos reales del SSE: un pulso del núcleo cuando Ápeiron cede la palabra, un haz cuando un agente replica a otro (`responds_to`) y un mensajero hacia el edificio de cada herramienta consultada.
+   - Controles: WASD o flechas, arrastrar para mirar, rueda para el zoom, Shift para correr, <kbd>M</kbd> para el mapa (clic en un lugar para viajar) y joystick táctil en móvil.
+   - El HUD orienta y narra (subfase 5a del ADR): bienvenida con los controles de tu dispositivo, minimapa con «estás aquí» y rumbo, dock de ciudadanos (estado de cada agente; un clic te lleva a su lugar), bocadillos sobre quien habla, crónica plegable con los turnos íntegros, barra de turno con cuenta atrás y <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, tribuna con presets (debate rápido, seminario paso a paso, asamblea abierta) y un aviso para **reanudar** una deliberación que quedó abierta. En táctil hay joystick y botón de mapa visibles, y los diálogos se abren como hoja inferior.
+   - ssanax es un personaje con esqueleto y animación (subfase 5h, [guía](docs/polis/characters.md)): camina y corre con inercia, salta (<kbd>Espacio</kbd>), saluda al llegar, piensa en tu turno, gesticula al hablar, hace gestos con <kbd>1</kbd>–<kbd>5</kbd> y mira a quien habla. Un `ssanax.glb` riggeado puede sustituirlo.
+   - La Polis es cósmica y monumental (subfase 5i): islas que flotan sobre un cosmos vivo (nebulosas, estrellas que titilan, constelaciones, meteoros), templos ciclópeos sin techo con columnas de 22 m, estatuas colosales derruidas, grietas por las que fluye energía estelar, vegetación bioluminiscente, polvo cósmico y ruinas a la deriva en el horizonte.
+   - La ciudad está en penumbra (subfase 5c): niebla exponencial, una luna rasante con sombras, linternas cálidas con *bloom*, el farol que lleva ssanax y post-proceso (viñeta, *color grading* de claroscuro y profundidad de campo, que se apaga mientras deliberas). La calidad (Baja/Media/Alta) se elige en la barra superior y baja sola si el equipo no llega; `?perf` muestra FPS y draw calls, y `?quality=low` fuerza el nivel bajo (CI). Los landmarks pueden venir de Blender en glTF siguiendo [la guía de landmarks](docs/polis/landmarks.md); hoy todos son procedurales.
+   - Sin WebGL o con *movimiento reducido*, la ruta muestra el grafo SVG y un enlace a la consola. Three.js solo se descarga al entrar en `/polis`.
+   - **Deliberar** (fase 2): en la tribuna del ágora eliges a los participantes (los cinco agentes y tú, hasta 6), las rondas o un **debate abierto**, un **tiempo máximo**, el **ritmo** (automático, con pausa de lectura, o **paso a paso**: tú das la palabra) y **tu tiempo para responder** (4 min por defecto). En tu turno, una barra con cuenta atrás te deja **hablar** o **pasar**; puedes **invitar** a otro agente a la siguiente ronda, **cerrar y sintetizar** o cancelar. Si se corta la conexión, la sesión sigue en el servidor y la página se reengancha sola.
+   - **El Archivo** (fase 4, con Supabase) lista tus crónicas y las **reproduce** en la ciudad con su ritmo original (comprimido), con las llamadas y los tokens de cada agente. **El Faro** muestra la salud del sistema: su luz es verde, ámbar o roja.
+8. La pestaña **Sistema** (`/sistema`) es el observatorio: salud de cada dependencia (LLM, memoria, Supabase, fuentes externas, guardrails, servidor A2A y agentes remotos con su circuit breaker), actividad de la instancia (ejecuciones en curso, estados, canales, tokens, latencia p50/p95, intervenciones por regla), topología local/remota, tareas A2A propias, tu actividad (desde el historial) y tu cupo de rate limit. Se refresca cada 10 s.
 
 Coste de referencia con `gpt-5.6-luna` y `reasoning_effort=low`: una consulta simple ≈ 360 tokens (1 llamada); un debate de 1 ronda ≈ 2.300 tokens (3 llamadas) sin evidencia obligatoria y ≈ 6.500 tokens (6–7 llamadas) con `APEIRON_REQUIRE_EVIDENCE=true`.
 
@@ -225,6 +234,9 @@ flowchart TD
 |---|---|---|
 | Anaximandro | Tesis desde el ápeiron, lógica formal y evidencia | `formal_logic_calculator`, `scholarly_search`, `mcp_public_api_tool`, `vector_memory_retriever` |
 | Heráclito | Contrapunto dialéctico desde el devenir y el logos | `vector_memory_retriever`, `scholarly_search`, `mcp_public_api_tool` |
+| Nietzsche | Crítica genealógica: origen de los valores, supuestos ocultos y contradicciones | `vector_memory_retriever`, `scholarly_search` |
+| Feynman | Verificación: mecanismo causal, experimentos y comprobación de hipótesis | `formal_logic_calculator`, `mcp_public_api_tool`, `scholarly_search`, `vector_memory_retriever` |
+| Epicuro | Prudencia: consecuencias, coste, utilidad y sufrimiento innecesario | `vector_memory_retriever`, `formal_logic_calculator` |
 
 **Interacción.** En debate, los workers hablan por turnos. Cada prompt incluye solo la **última posición** de cada interlocutor, con la instrucción de reconocer un acuerdo y formular su objeción. Así Heráclito replica a Anaximandro dentro de la misma ronda, y el contexto no crece con el historial completo.
 
@@ -237,7 +249,7 @@ flowchart TD
 
 **Extensibilidad.** Un agente nuevo (por ejemplo, Sócrates) es una fábrica más en el `AgentRegistry`. El grafo genera su nodo automáticamente y no hay que tocar el supervisor. Los participantes del debate se configuran explícitamente (`debate_participants`, de 1 a 4).
 
-**Cotas duras:** rondas 1–4, participantes 1–4, pasos ReAct 1–8, timeout por nodo ≤ 300 s, timeout por herramienta ≤ 120 s y `recursion_limit` 100. Se validan en `Settings`, en el API y en el grafo.
+**Cotas duras:** rondas 1–4, participantes 1–6 (cinco workers y el humano en sesiones), pasos ReAct 1–8, timeout por nodo ≤ 300 s, timeout por herramienta ≤ 120 s y `recursion_limit` 100. Se validan en `Settings`, en el API y en el grafo.
 
 **Guardrails** ([ADR-011](docs/adr/0011-a2a-guardrails.md), `APEIRON_GUARDRAILS_ENABLED=true`). Son reglas deterministas que no cuestan tokens y se aplican también en simulación, en cuatro puntos del grafo sin nodos extra:
 
@@ -270,7 +282,7 @@ Los workers reciben además una regla de sistema: las observaciones y los turnos
 | `GET` | `/.well-known/agent-card.json` | Agent Card A2A 1.0 (404 si `A2A_SERVER_ENABLED=false`) | Pública |
 | `POST` | `/a2a` | JSON-RPC A2A 1.0: `SendMessage`, `SendStreamingMessage`, `GetTask`, `CancelTask` | Bearer |
 
-Cuerpo de chat: `{"question": "...", "mode": "single"|"debate", "max_rounds": 1-4, "simulate": false}`. Los campos `mode` y `max_rounds` son opcionales. `question` admite hasta 4000 caracteres.
+Cuerpo de chat: `{"question": "...", "mode": "single"|"debate", "max_rounds": 1-4, "simulate": false, "agent": "heraclito"}`. Los campos `mode`, `max_rounds` y `agent` son opcionales. `question` admite hasta 4000 caracteres. `agent` elige el interlocutor ([ADR-013](docs/adr/0013-polis-agentic-world.md)): fuerza el modo `single`, debe existir en `/v1/agents` (también los remotos A2A) y no se combina con `mode: "debate"`; si no cumple alguna de las tres reglas, la API responde 422.
 
 Eventos SSE de `/v1/chat/stream`:
 
@@ -283,6 +295,22 @@ Eventos SSE de `/v1/chat/stream`:
 | `guard` | `{stage: "input"\|"observation"\|"turn"\|"output", action: "redact"\|"block", rules, agent, round}` | Intervención de un guardrail (nunca incluye el texto evaluado) |
 | `answer` | `{answer, mode, simulate, blocked, usage: {calls, input_tokens, output_tokens, total_tokens}}` | Cierre de la ejecución; `blocked` si el guardrail de entrada la rechazó |
 | `error` | `{message: "internal_error", trace_id}` | Fallo no recuperable; no expone detalles internos |
+
+### Sesiones deliberativas (Polis)
+
+[ADR-013](docs/adr/0013-polis-agentic-world.md). Un debate con vida propia en el servidor, en el que participa el usuario autenticado (`human`):
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/v1/sessions` | Crea y arranca: `{question, participants (1–6, incl. "human"), max_rounds \| open_ended, time_budget_s?, pace: auto\|step, turn_delay_s, human_turn_timeout_s, simulate}` |
+| `GET` | `/v1/sessions` | Sesiones abiertas del usuario, incluidas las que sobrevivieron a un reinicio de la API |
+| `GET` | `/v1/sessions/{id}` | Instantánea: estado, qué espera (`human_turn` o `advance`), plazo, participantes |
+| `GET` | `/v1/sessions/{id}/events?after=N` | SSE **reanudable**: los frames llevan `id: N` |
+| `POST` | `/v1/sessions/{id}/turn` | Turno del usuario (`""` = pasar). Pasa el guardrail de entrada: si lo bloquea, 422 y la sesión sigue esperando |
+| `POST` | `/v1/sessions/{id}/advance`, `/invite`, `/close` | Dar la palabra (ritmo paso a paso), invitar a un agente, cerrar y sintetizar |
+| `DELETE` | `/v1/sessions/{id}` | Cancelar |
+
+Además de los eventos de la tabla anterior, emite `session` `{status, waiting, deadline, next, responds_to, participants, reason}`. Cierra lo primero que ocurra: las rondas, el tiempo elegido, tu orden o un tope duro (`APEIRON_SESSION_MAX_LLM_CALLS`, `APEIRON_SESSION_MAX_DURATION_S`). Las sesiones viven en memoria por instancia (como las tareas A2A) y su checkpointer se borra al terminar.
 
 Cada respuesta HTTP incluye la cabecera `X-Trace-Id`. Si el cliente envía `x-trace-id`, se respeta. Los clientes deben ignorar tipos de evento desconocidos (el reducer web lo hace).
 
@@ -421,7 +449,7 @@ Para filtrar por usuario, búscalo por `metadata.user_id`. El `trace_id` de los 
 
 ## Frontend
 
-Angular 22 standalone, con signals y carga lazy ([`apps/web`](apps/web/), detalle en su [README](apps/web/README.md)). Cada contexto (`auth`, `research`, `observatory`) se organiza en capas `domain → application → infrastructure / presentation`; `architecture.spec.ts` verifica en los tests que ninguna capa interna importe una externa.
+Angular 22 standalone, con signals y carga lazy ([`apps/web`](apps/web/), detalle en su [README](apps/web/README.md)). Cada contexto (`auth`, `research`, `polis`, `observatory`) se organiza en capas `domain → application → infrastructure / presentation`; `architecture.spec.ts` verifica en los tests que ninguna capa interna importe una externa.
 
 | Pieza | Ubicación | Función |
 |---|---|---|
@@ -434,6 +462,7 @@ Angular 22 standalone, con signals y carga lazy ([`apps/web`](apps/web/), detall
 | Historial | `research/infrastructure/http-run-history.repository.ts` | `GET /v1/runs` y `GET /v1/runs/{id}` |
 | Guardrails | `research/domain/guardrails.ts` | Nombres legibles de reglas y etapas, conteos (evento SSE `guard`) |
 | Observatorio | `observatory/` (`domain/system-status.ts`, `application/observatory.store.ts`) | `GET /v1/system` con refresco cada 10 s; salud global, actividad y estadísticas del historial propio (funciones puras con spec) |
+| Polis 3D | `polis/` (`domain/city-layout.ts`, `citizen-state.ts`, `signals.ts`, `hud.ts`, `atmosphere.ts`, `landmark-conventions.ts`, `application/polis.store.ts`, `presentation/engine/`, `presentation/hud/`) | Ciudad generada desde la topología, suelo pisable, estado de cada agente, señales, HUD, atmósfera por niveles y convenciones de assets como funciones puras con spec; motor Three.js (`postprocessing`, Rapier perezoso) fuera del ciclo de Angular; HUD en componentes standalone (ADR-013) |
 | Pantallas | `auth/presentation/login/`, `research/presentation/workspace/`, `research/presentation/agent-graph/`, `observatory/presentation/system/` | Login, consola (casos/historial, chat, simulación, guardrails), grafo SVG en vivo (workers locales y remotos) y observatorio `/sistema` |
 
 En desarrollo, con la API corriendo en `:8000`:
@@ -455,6 +484,7 @@ Todas las variables usan el prefijo `APEIRON_` (salvo las claves de proveedor). 
 | Auth (modo local) | `JWT_SECRET`, `JWT_SECRET_PREVIOUS`, `JWT_TTL_MINUTES`, `PUBLIC_REGISTER`, `USERS_DB_PATH`, `AUTH_RATE_LIMIT_PER_MIN`, `CHAT_RATE_LIMIT_PER_MIN` |
 | LLM | `LLM_PROVIDER` (`fake`/`openai`/`anthropic`), `LLM_MODEL`, `LLM_FALLBACK_MODEL`, `LLM_MAX_TOKENS`, `LLM_REASONING_EFFORT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` |
 | Resiliencia | `LLM_TIMEOUT_S`, `LLM_RETRIES`, `BREAKER_FAILURES`, `BREAKER_RECOVERY_S`, `NODE_TIMEOUT_S`, `TOOL_TIMEOUT_S` |
+| Sesiones (Polis) | `SESSION_MAX_LLM_CALLS` (60), `SESSION_MAX_DURATION_S` (1800), `SESSION_MAX_ACTIVE_PER_USER` (3), `SESSION_TTL_S` (3600) |
 | Agentes | `DEFAULT_ROUNDS`, `MAX_REACT_STEPS`, `REQUIRE_EVIDENCE` (cada worker consulta al menos una herramienta; ≈ +1 llamada por worker), `DEBATE_PARTICIPANTS`, `SIMULATION_PACE_S` |
 | Memoria | `VECTOR_BACKEND` (`chroma`/`memory`), `CHROMA_HOST`, `CHROMA_PORT`, `MEMORY_MAX_DOCS_PER_USER`, `MEMORY_SEMANTIC_WEIGHT`, `MEMORY_LEXICAL_WEIGHT` |
 | Guardrails | `GUARDRAILS_ENABLED` (por defecto `true`; deterministas, 0 tokens) |
@@ -477,8 +507,8 @@ Todas las variables usan el prefijo `APEIRON_` (salvo las claves de proveedor). 
 ```sh
 make install   # dependencias editables + herramientas
 make check     # Ruff, mypy estricto e import-linter (4 contratos)
-make test      # pytest: 134 tests
-cd apps/web && npm test                                   # node:test: 29 tests (incluye reglas de capas)
+make test      # pytest: 160 tests
+cd apps/web && npm test                                   # node:test: 50 tests (incluye reglas de capas)
 cd apps/web && npm run build -- --configuration production
 ```
 
@@ -518,7 +548,7 @@ packages/core/src/apeiron_core/
     agents/                # ReActAgent (subgrafo), fábricas, AgentRegistry, dialogue_block
     orchestration/         # ApeironState / ApeironInput y build_graph (supervisor/worker)
     ports/                 # inbound: ChatUseCasePort · outbound: LLMPort, ToolPort, VectorStorePort...
-    use_cases/             # ApeironFacade: ask / stream (tasks + updates + custom, subgrafos)
+    use_cases/             # ApeironFacade: ask / stream · DeliberationService: sesiones con humano (interrupt/resume)
     context.py, usage.py   # RequestContext (incl. credencial delegada) y contador de tokens
     dto/runs.py            # AgentRun; puerto outbound RunRepositoryPort
 packages/infra/src/apeiron_infra/
@@ -531,7 +561,7 @@ packages/infra/src/apeiron_infra/
   tools/                   # formal_logic, public_api (arXiv), scholarly (MCP), vector_memory
   observability/           # JsonFormatter, configure_langsmith
 services/api/src/apeiron_api/
-  routes/                  # auth, chat, memory, runs, system, a2a
+  routes/                  # auth, chat, memory, runs, system, a2a, sessions
   a2a/                     # Agent Card y tareas A2A (TaskStore + ejecutor sobre la facade)
   container.py             # composition root: grafo real + grafo de simulación
   studio.py                # grafos para LangGraph Studio (apeiron, apeiron_demo)
@@ -543,6 +573,11 @@ apps/web/src/app/
                            # (Runtime/Supabase/Http gateways, interceptor) · presentation (login, guards)
   research/                # domain (chat, graph-run, run-record) · application (store, reducers, puertos)
                            # infrastructure (SSE, topología, historial) · presentation (consola, grafo)
+  polis/                   # domain (city-layout, citizen-state, signals, deliberation, replay, hud, atmosphere, landmark-conventions) · application (PolisStore, puerto)
+                           # · infrastructure (sesiones HTTP/SSE reanudable)
+                           # · presentation (página /polis, motor Three.js: world, places, figures, effects, input,
+                           #   atmosphere, post/, physics/ (2D y Rapier), world/ (batching, gltf/);
+                           #   HUD: minimap, roster, chronicle, turn-bar, tribune, onboarding, joystick, resume-banner)
   observatory/             # domain (system-status) · application (store, puerto) · infrastructure (HTTP)
                            # · presentation (página /sistema)
   shared/                  # configuración de API y utilidades de presentación
@@ -574,3 +609,4 @@ docs/adr/, docs/DEPLOY.md
 | [010](docs/adr/0010-supabase-sessions-runs.md) | Supabase: identidad, sesiones persistentes y ejecuciones de agentes |
 | [011](docs/adr/0011-a2a-guardrails.md) | Protocolo A2A, guardrails y observabilidad del sistema |
 | [012](docs/adr/0012-cloud-platform-hardening.md) | Endurecimiento de la plataforma cloud: IaC, entrega sin SSH, secretos gestionados, TLS y estado compartido (propuesto) |
+| [013](docs/adr/0013-polis-agentic-world.md) | La Polis: mundo 3D habitable con avatar propio, sesiones deliberativas y humano en el debate (fases 1 a 4 y subfases 5a, 5c, 5h y 5i implementadas) |

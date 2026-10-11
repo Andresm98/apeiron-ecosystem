@@ -34,6 +34,8 @@ export interface SystemStatus {
   components: SystemComponent[];
   activity: RuntimeActivity;
   a2a: { server_enabled: boolean; card_url: string | null; tasks: Record<string, number>; my_tasks: A2ATaskSummary[] };
+  /** Deliberaciones de la Polis en esta instancia (ADR-013); ausente en APIs anteriores. */
+  sessions?: { counts: Record<string, number>; max_llm_calls: number; max_duration_s: number; max_active_per_user: number };
   limits: {
     chat_per_min: number;
     chat_remaining: number | null;

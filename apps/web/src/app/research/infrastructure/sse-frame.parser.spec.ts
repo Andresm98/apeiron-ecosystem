@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseFrame } from './sse-frame.parser.ts';
+import { frameId, parseFrame } from './sse-frame.parser.ts';
 
 test('parseFrame parses valid SSE event frame', () => {
   const raw = 'event: trace\ndata: {"messages": ["step1"]}\n';
@@ -21,4 +21,10 @@ test('parseFrame tolerates CRLF line endings', () => {
 test('parseFrame returns null for empty or invalid frame', () => {
   assert.equal(parseFrame(''), null);
   assert.equal(parseFrame('comment only\n'), null);
+});
+
+test('frameId reads the event number of resumable session streams', () => {
+  assert.equal(frameId('id: 42\nevent: turn\ndata: {}\n'), 42);
+  assert.equal(frameId('id: 7\r\nevent: node\r\ndata: {}\r\n'), 7);
+  assert.equal(frameId('event: turn\ndata: {}\n'), null); // /v1/chat/stream no numera
 });

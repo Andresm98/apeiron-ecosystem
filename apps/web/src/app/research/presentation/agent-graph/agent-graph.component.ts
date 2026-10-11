@@ -1,7 +1,7 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { END, GraphRun, NodeStatus, START, edgeVisited, isLastEdge } from '../../domain/graph-run';
-import { AgentInfo, DEFAULT_AGENTS } from '../../domain/topology';
-import { agentLabel } from '../agent-label';
+import { AgentDirectory } from '../../application/agent-directory';
+import { AgentInfo } from '../../domain/topology';
 
 const W = 320;
 const MARGIN = 14;
@@ -44,7 +44,7 @@ export class AgentGraphComponent {
   readonly END = END;
 
   readonly workers = computed<WorkerBox[]>(() => {
-    const agents = this.agents()?.length ? this.agents()! : DEFAULT_AGENTS;
+    const agents = this.agents() ?? [];
     const n = agents.length;
     const w = (W - MARGIN * 2 - GAP * (n - 1)) / n;
     return agents.map((a, i) => {
@@ -85,5 +85,5 @@ export class AgentGraphComponent {
     return `M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`;
   }
 
-  readonly label = agentLabel;
+  readonly label = inject(AgentDirectory).label;
 }

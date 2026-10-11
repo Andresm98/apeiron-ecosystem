@@ -122,6 +122,13 @@ async def system(
             "tasks": c.a2a_tasks.counts(),
             "my_tasks": [task.summary() for task in c.a2a_tasks.for_owner(user)],
         },
+        # Deliberaciones de la Polis (ADR-013): solo conteos por estado de esta instancia, nunca contenidos.
+        "sessions": {
+            "counts": c.sessions.counts() if c.sessions else {},
+            "max_llm_calls": s.session_max_llm_calls,
+            "max_duration_s": s.session_max_duration_s,
+            "max_active_per_user": s.session_max_active_per_user,
+        },
         "limits": {
             "chat_per_min": s.chat_rate_limit_per_min,
             "chat_remaining": c.limiter.remaining(f"chat:{user}", s.chat_rate_limit_per_min),

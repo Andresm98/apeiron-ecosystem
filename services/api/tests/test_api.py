@@ -125,11 +125,49 @@ def test_simulated_stream_walks_full_graph_without_tokens(client):
     assert answer["usage"]["calls"] == 5  # 2 pasos x 2 workers + síntesis
 
 
+def test_stream_with_chosen_agent_answers_from_that_agent(client):
+    with client.stream(
+        "POST",
+        "/v1/chat/stream",
+        json={"question": "¿Qué es el ápeiron?", "agent": "heraclito", "simulate": True},
+        headers=auth_headers(client),
+    ) as r:
+        frames = [f for f in r.read().decode().split("\n\n") if f]
+    parsed = [
+        (f.splitlines()[0].removeprefix("event: "), json.loads(f.splitlines()[1][6:]))
+        for f in frames
+    ]
+    turns =[data for kind, data in parsed if kind == "turn"]
+    assert [t["agent"] for t in turns] == ["heraclito"]
+    assert parsed[-1][1]["mode"] == "single"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"question": "x", "agent": "socrates"},  # no está en la topología
+        {"question": "x", "agent": "heraclito", "mode": "debate"},  # agent solo en single
+        {"question": "x", "agent": "Heraclito; drop"},  # formato de id inválido
+    ],
+)
+def test_chosen_agent_is_validated_by_the_api(client, body):
+    headers = auth_headers(client)
+    assert client.post("/v1/chat", json=body, headers=headers).status_code == 422
+    assert client.post("/v1/chat/stream", json=body, headers=headers).status_code == 422
+
+
 def test_agents_endpoint_describes_topology(client):
     body = client.get("/v1/agents", headers=auth_headers(client)).json()
     assert body["orchestrator"] == "apeiron"
-    assert [a["name"] for a in body["agents"]] == ["anaximandro", "heraclito"]
-    assert body["debate_participants"] == ["anaximandro", "heraclito"]
+    assert [a["name"] for a in body["agents"]] == ["anaximandro", "heraclito", "nietzsche", "feynman", "epicuro"]
+    assert body["debate_participants"] == ["anaximandro", "heraclito"]  # los que declaran `debate = true`
+    assert body["limits"]["max_participants"] == 6 and body["human"] == "human"
+    feynman = body["agents"][3]  # todo lo visible de un agente sale de su manifiesto (ADR-013, catálogo de agentes)
+    assert feynman["display_name"] == "Feynman" and feynman["a2a"] is True
+    assert feynman["residence"] == {
+        "title": "El Taller", "subtitle": "Modelos causales y experimentos", "landmark": "workshop",
+        "color": "#3f8fc4", "epithet": "Si no puede explicarse con sencillez, no se entiende",
+    }
 
 
 def test_validation_rejects_bad_rounds(client):
@@ -149,7 +187,7 @@ def test_validation_rejects_bad_rounds(client):
         {"node_timeout_s": 301},
         {"max_react_steps": 9},
         {"tool_timeout_s": 121},
-        {"debate_participants": []},
+        {"debate_participants": ["anaximandro"] * 7},
     ],
 )
 def test_runtime_settings_enforce_hard_limits(override):

@@ -17,11 +17,13 @@ RUN groupadd --system app \
 WORKDIR /app
 
 COPY packages/core packages/core
+COPY packages/agents packages/agents
 COPY packages/infra packages/infra
 COPY services/api services/api
 
 RUN pip install \
     ./packages/core \
+    ./packages/agents \
     "./packages/infra[llm,chroma,mcp]" \
     ./services/api \
     "langgraph-cli[inmem]>=0.4,<0.5"

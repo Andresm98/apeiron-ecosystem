@@ -11,7 +11,8 @@ Contexto compartido para todo agente de código (Claude Code y compatibles) que 
 Plataforma multiagente de razonamiento filosófico-científico:
 
 - **Ápeiron**: el orquestador. Es un grafo LangGraph que enruta la pregunta (`single` o `debate`), supervisa los turnos y sintetiza.
-- **Workers ReAct**: `anaximandro` y `heraclito`. Cada uno es un subgrafo LangGraph `reason ⇄ act` que llama a un LLM y a herramientas.
+- **Workers ReAct**: `anaximandro`, `heraclito`, `nietzsche` (crítica genealógica), `feynman` (verificación) y `epicuro` (prudencia). Cada uno es un subgrafo LangGraph `reason ⇄ act` que llama a un LLM y a herramientas. **Cada agente es una carpeta** en `packages/agents/` (`agent.toml` + `persona.md`; ADR-013, catálogo de agentes): ningún código conoce a un agente por su nombre.
+- **La Polis y las sesiones deliberativas** (ADR-013): mundo 3D en `/polis` y `/v1/sessions`, donde el usuario autenticado (`human`, *ssanax* como nombre visible) convoca a hasta 6 participantes, toma la palabra y gobierna el ritmo, la duración y el cierre. El grafo de sesiones usa `interrupt()` y un checkpointer; con `APEIRON_SESSIONS_DB_PATH` las sesiones sobreviven a un reinicio (diario y checkpoints SQLite).
 - **Herramientas**: `formal_logic_calculator` (lógica proposicional propia), `scholarly_search` (literatura con DOI vía el servidor MCP propio `apeiron-scholar` → OpenAlex), `mcp_public_api_tool` (arXiv) y `vector_memory_retriever` (Chroma con rerank híbrido BM25).
 - **Simulación a 0 tokens**: `FakeLLM` determinista recorre el grafo completo con evidencia real de la memoria. Es la forma por defecto de probar cualquier cambio.
 - **Identidad e historial**: Supabase Auth (JWT verificado por JWKS) y Postgres con RLS (`agent_runs`, `agents`, `agent_executions`). Hay un modo `local` alternativo (SQLite y JWT HS256) sin historial.
@@ -33,7 +34,7 @@ Plataforma multiagente de razonamiento filosófico-científico:
 | Resiliencia | tenacity (retry + jitter), circuit breaker propio | `infra/resilience/` |
 | Auth | PyJWT[crypto] (HS256 / ES256 / RS256 / EdDSA vía JWKS), bcrypt | `infra/security/` |
 | Datos | **Supabase** Postgres 17 + Auth + PostgREST, gestionado con la Supabase CLI (`npx supabase`) | `supabase/` |
-| Frontend | Angular 22 standalone + signals, TypeScript ~6.0, rxjs 7.8, `@supabase/supabase-js` 2.x | `apps/web/package.json` |
+| Frontend | Angular 22 standalone + signals, TypeScript ~6.0, rxjs 7.8, `@supabase/supabase-js` 2.x, Three.js 0.180 y `postprocessing` 6.39 (solo en el chunk de `/polis`), `@dimforge/rapier3d-compat` 0.21 (chunk propio, solo si un landmark trae colisionadores) | `apps/web/package.json` |
 | Tests | pytest + pytest-asyncio (`asyncio_mode=auto`), `node --test` con `--experimental-strip-types` | `pyproject.toml`, `apps/web/package.json` |
 | Calidad | ruff (`E,F,I,UP,B,ASYNC`, línea 120), mypy estricto, import-linter | `pyproject.toml`, `.importlinter`, `Makefile` |
 | Entrega | Docker, Nginx 1.27, GitHub Actions, GHCR, EC2 (Amazon Linux, `ec2-user`) | `deploy/`, `.github/workflows/` |
@@ -54,9 +55,11 @@ packages/core/src/apeiron_core/            # NÚCLEO (sin SDKs de proveedor)
     agents/factories.py                    # personas + AgentFactory (name, role, tools, create)
     agents/registry.py                     # AgentRegistry: register / describe / build_all
     orchestration/state.py                 # ApeironInput, ApeironState (reducers operator.add en turns/trace)
-    orchestration/graph.py                 # build_graph: router → worker → supervisor → … → synthesis
+    orchestration/graph.py                 # build_graph: router → worker|human → supervisor → … → synthesis
+    orchestration/control.py               # DeliberationControl (ContextVar): cerrar, invitar, tiempo, ritmo, topes; HUMAN, MAX_PARTICIPANTS
     use_cases/chat.py                      # ApeironFacade: ask / stream, memoriza, registra la ejecución
-    use_cases/execution.py                 # ExecutionCollector: stream LangGraph → ChatEvent + AgentExecution
+    use_cases/execution.py                 # ExecutionCollector: stream LangGraph → ChatEvent + AgentExecution (+ cronología, interrupciones)
+    use_cases/deliberation.py              # DeliberationService/Session: sesiones con humano, interrupt/resume, eventos numerados
     ports/inbound/chat.py                  # ChatUseCasePort
     ports/outbound/{llm,tools,memory,runs,agents,events,guardrails}.py
     guardrails.py                          # RuleGuardrails por etapa + apply_guardrail (política de fallo, traza)
@@ -64,25 +67,28 @@ packages/core/src/apeiron_core/            # NÚCLEO (sin SDKs de proveedor)
     context.py                             # RequestContext (user_id, session_id, trace_id, channel, a2a_task_id, a2a_hops, access_token oculto)
     metrics.py                             # RuntimeMetrics: agregados en memoria por instancia (estados, canales, guardrails, latencia)
     usage.py                               # TokenUsage + usage_meter (ContextVar) + record_usage()
+packages/agents/src/apeiron_agents/       # CATÁLOGO DE AGENTES (solo datos + cargador; depende de core)
+  catalog.py · __main__.py (list | migration) · <nombre>/agent.toml · <nombre>/persona.md
 packages/infra/src/apeiron_infra/          # ADAPTADORES DE SALIDA
   llm/{langchain_llm,resilient,fake}.py
   memory/{vector,hybrid}.py                # ChromaVectorStore, InMemoryVectorStore, PRESOCRATIC_SEED, bm25 + hybrid_rerank
   tools/{formal_logic,public_api,scholarly,vector_memory}.py
   security/{supabase,tokens,users,rate_limit}.py
   persistence/supabase_runs.py             # SupabaseRunRepository (PostgREST + RPC, JWT delegado)
+  persistence/sessions.py                  # SqliteSessionJournal + open_sqlite_checkpointer (sesiones durables)
   resilience/{circuit_breaker,policies}.py
   observability/{logging,langsmith}.py
 services/api/src/apeiron_api/              # ADAPTADOR DE ENTRADA + COMPOSITION ROOT
   main.py (create_app, middleware trace_id) · deps.py (current_user, rate limits) · settings.py
-  routes/{auth,chat,memory,runs,system,a2a}.py · schemas.py · container.py · studio.py
+  routes/{auth,chat,memory,runs,system,a2a,sessions}.py · schemas.py · container.py · studio.py
   a2a/{card,tasks}.py                      # Agent Card y A2ATaskStore + run_task (ChatEvent -> eventos A2A)
 services/mcp-scholar/src/apeiron_mcp_scholar/  # servidor MCP OpenAlex (independiente: no importa apeiron_*)
 apps/web/src/app/                          # Angular: <contexto>/{domain,application,infrastructure,presentation}
-  auth/ · research/ · observatory/ (/sistema) · shared/ · app.{ts,config.ts,routes.ts} · architecture.spec.ts
+  auth/ · research/ · polis/ (/polis: domain incl. hud.ts, atmosphere.ts, landmark-conventions.ts; presentation/engine (Three.js, avatar/ (ssanax con esqueleto), cosmos/ (cielo, polvo, energía, antorchas, vegetación, horizonte), monuments.ts, post/, physics/, world/gltf); presentation/hud; ADR-013) · observatory/ (/sistema) · shared/ · app.{ts,config.ts,routes.ts} · architecture.spec.ts
 supabase/{config.toml,migrations/,README.md}
 deploy/{docker/,nginx/,scripts/{deploy-ec2.sh,render_env.py,smoke_e2e.py},tests/,docker-compose.yml}
 .github/workflows/{ci.yml,deploy-ec2.yml}
-docs/{adr/0001…0011,DEPLOY.md}
+docs/{adr/0001…0013,DEPLOY.md}
 langgraph.json · Makefile · .importlinter · pyproject.toml (config de herramientas, no es un paquete)
 ```
 
@@ -112,8 +118,8 @@ Angular (SseChatStreamAdapter, fetch POST + Bearer)
 4. **Angular por capas** (lo verifica [`architecture.spec.ts`](apps/web/src/app/architecture.spec.ts)): `domain` no importa frameworks ni nada no relativo; `application` no importa `infrastructure` ni `presentation`; `presentation` no importa `infrastructure`.
 5. **Identidad**: `user_id` sale siempre del token verificado (`deps.current_user`), nunca del body. El `access_token` viaja en `RequestContext` con `repr=False` y nunca se registra en logs.
 6. **Supabase**: el esquema solo cambia con migraciones nuevas de la CLI, que deben ser idempotentes, con RLS por `(select auth.uid())`, sin acceso para `anon` y con RPC `security invoker` y `search_path = ''`. La app usa solo la **publishable key** más el JWT del usuario. Nunca se usa `service_role` ni SQL a mano en el dashboard.
-7. **Contrato SSE estable** (§7): cualquier cambio toca a la vez backend, `sse-frame.parser`, `domain/chat.ts`, reducers, tests y README.
-8. **Cotas duras**: rondas 1–4, participantes 1–4, pasos ReAct 1–8, timeout de nodo ≤ 300 s, timeout de herramienta ≤ 120 s, `recursion_limit` 100, pregunta ≤ 4000 caracteres. Se validan en `Settings`, `schemas.ChatRequest`, `_validate` del grafo y `ReActAgent.__init__`.
+7. **Contrato SSE estable** (§7): cualquier cambio toca a la vez backend, `sse-frame.parser`, `domain/chat.ts`, reducers, tests y README. ADR-013 añadió el evento `session` y el campo `id: N` (solo en `/v1/sessions/{id}/events`).
+8. **Cotas duras**: rondas 1–4 (o debate abierto en sesión, acotado por los topes de sesión), participantes 1–6 (cinco workers y el humano; ADR-013), pasos ReAct 1–8, timeout de nodo ≤ 300 s, timeout de herramienta ≤ 120 s, `recursion_limit` 100 (600 en sesiones), pregunta ≤ 4000 caracteres, sesión ≤ `SESSION_MAX_LLM_CALLS` llamadas y ≤ `SESSION_MAX_DURATION_S`. Se validan en `Settings`, `schemas.ChatRequest`/`SessionRequest`, `_validate` y el router del grafo, `DeliberationControl` y `ReActAgent.__init__`.
 9. **Degradar, no caer**: si un worker o la síntesis falla, el turno se marca `degraded` o se devuelve una síntesis determinista. Un fallo de memoria o de Supabase solo deja un warning (`memorize_failed`, `run_persist_failed`). El evento `error` del SSE nunca expone detalles internos.
 10. **El razonamiento privado no sale**: el `Thought` del ReAct nunca aparece en `answer`, `turn`, `step`, logs persistidos ni `agent_runs.steps`.
 11. **Simulación primero**: todo cambio de agentes o del grafo debe funcionar con `FakeLLM`. La simulación no escribe en la memoria del usuario, pero sí guarda la ejecución (con `simulate=true`).
@@ -127,7 +133,8 @@ Angular (SseChatStreamAdapter, fetch POST + Bearer)
 - **Estado**: `turns` y `trace` son listas con reducer `operator.add`, así que cada nodo devuelve solo lo nuevo. `speaker` es el índice dentro de `participants`.
 - **Stream**: `stream_mode=["tasks","updates","custom"]` con `subgraphs=True` produce tuplas `(namespace, kind, chunk)`. `tasks` se convierte en eventos `node` (`anaximandro/act`). `updates` del grafo raíz se convierte en `turn`/`trace`/`answer`. `custom` (de `get_stream_writer`) se convierte en `trace` y `step`.
 - **Studio**: `langgraph.json` expone `apeiron` (LLM real) y `apeiron_demo` (simulación), construidos por `studio.py` con la misma composición que la API (sin JWT; usuario `anonymous`; grafo cacheado por event loop).
-- **Sin checkpointer**: no hay memoria conversacional implícita entre invocaciones (pendiente en ADR-009).
+- **Checkpointer solo en sesiones** (ADR-013): `InMemorySaver` por instancia, `thread_id = session_id`, se borra al terminar. `/v1/chat` sigue sin checkpointer: no hay memoria conversacional implícita entre invocaciones.
+- **Humano en el bucle**: el nodo `human` hace `interrupt()`; con ritmo `step` también el supervisor. La sesión reanuda con `Command(resume=...)` y **nunca con `None`** (LangGraph 1.2 falla): un turno vacío es `""`. El supervisor puede re-ejecutarse al reanudar, así que no tiene efectos fuera del estado (los invitados se fusionan sin borrarse).
 
 ### LangChain (LLM)
 - `LangChainLLM` usa `init_chat_model(model, model_provider=provider, temperature=0.2, max_tokens, reasoning_effort?)` con import diferido. Lee `msg.usage_metadata` y llama a `record_usage()` y a `log.info("llm_call", …)`.
@@ -203,12 +210,19 @@ Angular (SseChatStreamAdapter, fetch POST + Bearer)
 | GET | `/v1/auth/config` | `{provider, public_register, runs_enabled[, supabase_url, supabase_key]}` |
 | POST | `/v1/auth/register`, `/v1/auth/token` | Solo en modo local (404 en supabase); rate limit por IP |
 | GET | `/v1/agents` | Topología: `orchestrator`, `agents[{name, role, tools}]`, `debate_participants`, `modes`, `llm`, `limits` |
-| POST | `/v1/chat`, `/v1/chat/stream` | Body `{question ≤4000, mode?, max_rounds? 1–4, simulate?}`; rate limit por usuario |
+| POST | `/v1/chat`, `/v1/chat/stream` | Body `{question ≤4000, mode?, max_rounds? 1–4, simulate?, agent?}`; `agent` fuerza `single` y se valida contra la topología (422); rate limit por usuario |
 | DELETE | `/v1/memory` | Borra la memoria del usuario (204) |
 | GET | `/v1/runs?limit=1..100`, `/v1/runs/{uuid}` | 404 sin Supabase, 502 si Supabase falla |
 | GET | `/v1/system` | Observatorio: `service`, `components[]`, `activity`, `a2a{server_enabled, card_url, tasks, my_tasks}`, `limits` |
 | GET | `/.well-known/agent-card.json` | Pública; 404 si `APEIRON_A2A_SERVER_ENABLED=false` |
 | POST | `/a2a` | JSON-RPC A2A 1.0 (`SendMessage`, `SendStreamingMessage`, `GetTask`, `CancelTask`); cabecera `A2A-Version` 1.x |
+| GET | `/a2a/agents/{name}/.well-known/agent-card.json` | Card propia de un agente con `a2a = true` en su manifiesto (pública; 404 si no) |
+| POST | `/a2a/agents/{name}` | JSON-RPC A2A con ese agente en modo `single` (mismo Bearer y rate limit) |
+| POST | `/v1/sessions` | Deliberación (ADR-013): `{question, participants? 1–6 (incl. human), max_rounds?, open_ended?, time_budget_s? 60–1800, pace auto\|step, turn_delay_s 0–30, human_turn_timeout_s 30–600, simulate?}`; 201, 429 si hay demasiadas activas |
+| GET | `/v1/sessions` | Sesiones abiertas del usuario, incluidas las dormidas tras un reinicio (`dormant: true`) |
+| GET | `/v1/sessions/{id}`, `/v1/sessions/{id}/events?after=N` | Instantánea y SSE reanudable (frames con `id: N`); ajenas = 404; una sesión dormida se rehidrata al leerla |
+| POST | `/v1/sessions/{id}/turn`, `/advance`, `/invite`, `/close` | Turno de ssanax (`""` = pasar; 422 si el guardrail lo bloquea), dar la palabra, invitar, cerrar y sintetizar; 409 si el estado no lo admite |
+| DELETE | `/v1/sessions/{id}` | Cancela la sesión |
 
 **SSE** (`/v1/chat/stream`):
 
@@ -220,19 +234,18 @@ Angular (SseChatStreamAdapter, fetch POST + Bearer)
 | `turn` | `{agent, round, text, degraded, responds_to}` |
 | `guard` | `{stage: input\|observation\|turn\|output, action: redact\|block, rules, agent, round}` (sin texto) |
 | `answer` | `{answer, mode, simulate, blocked, usage: {calls, input_tokens, output_tokens, total_tokens}}` |
+| `session` | Solo en sesiones: `{id, status: running\|waiting\|closing\|completed\|cancelled\|error, waiting: human_turn\|advance\|null, deadline, next?, round?, responds_to?, participants, reason, last_event}` |
 | `error` | `{message: "internal_error", trace_id}` (lo emite la ruta, no `ChatEvent`) |
 
 ## 8. Recetas de extensión (todos los puntos que hay que tocar)
 
-### Nuevo agente worker (p. ej. `socrates`)
-1. **core/application**: persona y `SocratesFactory` en `agents/factories.py` (`name`, `role`, tupla `tools`).
-2. **core/domain**: palabras clave en `AGENT_HINTS` de `services/routing.py` si debe poder elegirse en modo `single`.
-3. **api**: `registry.register(SocratesFactory())` en `_registry()` de `container.py`. Si participa en debates, añadirlo a `APEIRON_DEBATE_PARTICIPANTS` (máximo 4).
-4. **infra/simulación**: `_speaker` y `STANCES` en `llm/fake.py` (y `_label` si el nombre lleva tilde) para que la simulación sea creíble.
-5. **supabase**: migración nueva que inserte el agente en `public.agents` (upsert). Sin esa fila, `agent_executions` lo omite en silencio.
-6. **web**: `agentLabel` en `research/presentation/agent-label.ts`. Revisar `DEFAULT_AGENTS` (`domain/topology.ts`) y la disposición del SVG en `agent-graph`.
-7. **tests**: topología (`describe()`, `/v1/agents`), orden de turnos, simulación sin tokens y routing de dominio.
-8. **docs**: tablas de workers en el README y, si cambia la topología, un ADR.
+### Nuevo agente worker (p. ej. `socrates`) — sin tocar código (ADR-013, catálogo de agentes)
+1. **Carpeta** `packages/agents/src/apeiron_agents/socrates/` con `agent.toml` (identidad, `[access]` tools/a2a/max_steps, `[routing]`, `[card]`, `[residence]`, `[simulation]`) y `persona.md` (debe decir «Eres Sócrates»). Copiar una carpeta existente como plantilla.
+2. **Comprobar**: `python -m apeiron_agents list` (falla si el manifiesto es inválido o declara tools desconocidas).
+3. **supabase**: `python -m apeiron_agents migration --write supabase/migrations` (genera el upsert del catálogo; `test_catalog.py` falla si falta). `db push` remoto solo con confirmación.
+4. **debate por defecto**: `debate = true` en el manifiesto (si `APEIRON_DEBATE_PARTICIPANTS` está vacío; máximo 6 participantes).
+5. **persona**: si es un agente de debate, medir la diferenciación con LLM real (`python -m apeiron_api.evals.differentiation --yes --label <x>`, ≈115.000 tokens) y guardar el informe en `docs/evals/`.
+6. **docs**: tablas de workers en el README.
 
 ### Nuevo worker remoto (A2A)
 1. `APEIRON_A2A_REMOTE_AGENTS` con `{name, url, role, token_env}`, el host en `APEIRON_A2A_ALLOWED_HOSTS` y el secret `APEIRON_A2A_TOKEN_<NOMBRE>` en el `.env` de la VM (`docs/DEPLOY.md`).
@@ -268,7 +281,7 @@ Campo en `Settings` con `Field(ge/le)` → `.env.example` → validación en `de
 ## 9. Comandos
 
 ```sh
-make install                 # pip -e core, infra[llm,chroma,mcp], api + pytest, ruff, mypy, import-linter
+make install                 # pip -e core, agents, infra[llm,chroma,mcp,sessions], api + pytest, ruff, mypy, import-linter
 make check                   # ruff check . && mypy (3 src) && lint-imports
 make test                    # pytest -q (core, infra, api, deploy/tests)
 APEIRON_LLM_PROVIDER=fake APEIRON_AUTH_PROVIDER=local APEIRON_VECTOR_BACKEND=memory make run   # API sin coste en :8000
@@ -299,8 +312,13 @@ npx supabase migration new <nombre> | migration list | db push              # SO
 | `services/api/tests/test_a2a_api.py` | Servidor A2A (card, JSON-RPC, streaming, errores, dueño, cancelación), `/v1/system`, Ápeiron ⇄ Ápeiron por A2A y corte de bucles |
 | `services/mcp-scholar/tests/test_scholar.py` | Servidor MCP: formato OpenAlex con DOI, límites, protocolo MCP real en proceso, errores controlados, DNS rebinding |
 | `packages/infra/tests/test_a2a_client.py` | Cliente A2A: SSRF/https, credencial propia, streaming y SendMessage, breaker, límite de saltos |
+| `packages/core/tests/test_sessions.py` | Sesiones: turno humano, plazo, pasar, ritmo `step`, cerrar, invitar, guardrail sobre el turno, topes de llamadas y tiempo, cancelar, validación de participantes y tokens por agente |
+| `services/api/tests/test_sessions_api.py` | API de sesiones: debate con ssanax, SSE numerado y reanudable, paso a paso, invitar, cerrar, privacidad, validación, límite de sesiones y **supervivencia a un reinicio** (dos apps con SQLite) |
+| `packages/agents/tests/test_catalog.py` | Catálogo de agentes: carga por carpetas, manifiestos inválidos, agente nuevo sin código y catálogo SQL alineado (huella de la migración generada) |
+| `packages/infra/tests/test_sessions_store.py` | Diario SQLite de sesiones: orden, idempotencia, sesiones abiertas por dueño, poda y checkpointer SQLite |
+| `services/api/tests/test_evals.py` | Métricas del eval de diferenciación (enmascarado, solapamiento, turnos degradados) sin LLM |
 | `deploy/tests/test_render_env.py` | Plantilla `.env` y validaciones de producción |
-| `apps/web/src/app/**/*.spec.ts` | Parser SSE, reducers (incl. `guard` y eventos desconocidos), graph-run, dialogue, sanitizer, auth, guardrails, observatorio y capas |
+| `apps/web/src/app/**/*.spec.ts` | Parser SSE, reducers (incl. `guard`, eventos desconocidos, `cancelled` y tipo de fallo), graph-run, dialogue, sanitizer, auth, guardrails, observatorio, Polis (trazado, suelo pisable, estados, señales, HUD: presets, cuenta atrás, crónica, rótulos, rumbo, reanudar; atmósfera: contraste AA, niveles, regulador; convenciones glTF y Rapier con WASM real en `engine/physics/rapier.spec.ts`; animación de ssanax en `engine/avatar/*.spec.ts`) y capas |
 
 Los doubles se escriben a mano (clases con `complete`/`run`). Nunca se llama a LLMs ni a la red reales.
 
@@ -310,10 +328,11 @@ Datos para planificar. Verificar contra el código antes de actuar.
 
 - **CI no ejecuta `npm test`** (solo `npm ci` + build). Las reglas de capas del frontend no bloquean un PR.
 - **ADRs desactualizados**: ADR-001 (habla de un `app.ts` único), ADR-003 (`Send`/`round_gate`, reemplazado por 009), ADR-005 (token solo en memoria, reemplazado por 010) y una contradicción entre ADR-006 y ADR-007 sobre CRLF en SSE: `parseFrame` normaliza `\r\n`, pero `SseChatStreamAdapter` separa los frames con `\n\n`, así que un servidor que use `\r\n\r\n` no se partiría bien.
-- **Pendientes declarados**: CSP en Nginx y retención/borrado de historial desde la UI (ADR-010); checkpointer persistente y síntesis que cite la evidencia (ADR-009); TLS real y backups probados de `chroma-data`/`api-data` (ADR-008).
+- **Pendientes declarados**: CSP en Nginx y retención/borrado de historial desde la UI (ADR-010); checkpointer persistente (las sesiones de ADR-013 usan uno en memoria) y síntesis que cite la evidencia (ADR-009); TLS real y backups probados de `chroma-data`/`api-data` (ADR-008).
 - **Escala horizontal**: `SlidingWindowLimiter`, `A2ATaskStore` y `RuntimeMetrics` viven en memoria y aplican por instancia. Hace falta un adaptador compartido antes de tener más de una réplica.
 - **A2A pendiente**: notificaciones push, `SubscribeToTask`, `ListTasks`, `input-required`, continuar tareas por `taskId`, firma de la card y un test automático contra `a2a-sdk` (hoy la validación se hizo a mano; ADR-011).
-- **Puntos de acoplamiento por nombre de agente**: `AGENT_HINTS` (dominio), `STANCES`/`_speaker` (`FakeLLM`), `agentLabel` y `DEFAULT_AGENTS` (web) y las personas del catálogo SQL. Se pueden mover a datos declarados por la fábrica o la topología.
+- **Eval de personas v2**: 3 de 30 turnos degradados con LLM real (Feynman 2, Nietzsche 1), causa sin verificar; Anaximandro solo se reconoce el 50% (ADR-013).
+- **Fase 5 de la Polis** (ADR-013): 5a (HUD), 5c (atmósfera, post-proceso, parser glTF, Rapier) 5h (personaje de ssanax con esqueleto; guía en `docs/polis/characters.md`) y 5i (Polis cósmica a escala monumental, `WORLD_SCALE`) hechas; siguen E2E en CI (5b, `@playwright/test` ya instalado, con `?quality=low`), el primer landmark glTF real (5d, guía en `docs/polis/landmarks.md`), KTX2 y el resto de assets (5e) y el suelo `walk_*` (5f).
 - **Candidatos de producto** ya previstos: nuevos workers (Sócrates, Anaxágoras), migrar la memoria a pgvector (fuera de alcance según ADR-010), Markdown/KaTeX en la UI y pruebas de navegador.
 - `supabase/config.toml` apunta a `./seed.sql`, que no existe.
 - `deploy/scripts/render_env.py` y `deploy/tests/` se citan en este fichero (§3, §5.12, §8, §10), pero no existen en el repo.

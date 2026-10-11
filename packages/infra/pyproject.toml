@@ -13,6 +13,8 @@ chroma = [
     "tokenizers"
 ]
 mcp = ["mcp>=2.3,<3"]  # API 2.x (MCPServer, streamable_http_client); validada contra apeiron-scholar
+# Sesiones deliberativas durables (ADR-013, fase 5): checkpointer SQLite de LangGraph.
+sessions = ["langgraph-checkpoint-sqlite>=3.1,<4", "aiosqlite>=0.20"]
 
 [build-system]
 requires = ["setuptools>=68"]

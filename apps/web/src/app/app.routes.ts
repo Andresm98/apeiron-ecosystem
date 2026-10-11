@@ -9,6 +9,12 @@ export const routes: Routes = [
     loadComponent: () => import('./auth/presentation/login/login.page').then((m) => m.LoginPage),
   },
   {
+    path: 'polis',
+    canActivate: [authGuard],
+    title: 'Ápeiron | Polis',
+    loadChildren: () => import('./polis/polis.routes').then((m) => m.polisRoutes),
+  },
+  {
     path: 'sistema',
     canActivate: [authGuard],
     title: 'Ápeiron | Sistema',

@@ -1,5 +1,8 @@
 import type { AgentStep, GuardEvent, Turn, Usage } from './chat.ts';
 
+/** Evento público de la cronología guardada (ADR-013, fase 4): instante relativo en ms, tipo y datos. */
+export interface TimelineEvent { t: number; type: string; data: unknown; }
+
 /** Resumen de una ejecución persistida (lista del historial). */
 export interface RunSummary {
   id: string;
@@ -11,8 +14,8 @@ export interface RunSummary {
   usage: Partial<Usage>;
   model: string;
   duration_ms: number;
-  /** Origen: la consola web o otro agente vía A2A (ADR-011). */
-  channel?: 'web' | 'a2a';
+  /** Origen: la consola web, otro agente vía A2A (ADR-011) o una deliberación de la Polis (ADR-013). */
+  channel?: 'web' | 'a2a' | 'session';
   a2a_task_id?: string | null;
   guardrails?: GuardEvent[];
 }
@@ -26,6 +29,10 @@ export interface AgentExecution {
   tools_used: string[];
   degraded: boolean;
   duration_ms: number;
+  /** Llamadas y tokens atribuidos a este agente (ADR-013, fase 4); ausentes en ejecuciones antiguas. */
+  llm_calls?: number;
+  input_tokens?: number;
+  output_tokens?: number;
 }
 
 /** Ejecución completa: lo necesario para reabrirla en la consola. */
@@ -37,4 +44,7 @@ export interface RunRecord extends RunSummary {
   steps?: AgentStep[];
   agent_executions?: AgentExecution[];
   error: string | null;
+  /** Configuración de la deliberación y cronología para el replay (ADR-013). */
+  config?: Record<string, unknown>;
+  events?: TimelineEvent[];
 }

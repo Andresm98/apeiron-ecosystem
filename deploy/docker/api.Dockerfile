@@ -11,6 +11,7 @@ ENV PIP_NO_CACHE_DIR=1 \
 WORKDIR /src
 
 COPY packages/core packages/core
+COPY packages/agents packages/agents
 COPY packages/infra packages/infra
 COPY services/api services/api
 COPY services/mcp-scholar services/mcp-scholar
@@ -18,7 +19,8 @@ COPY services/mcp-scholar services/mcp-scholar
 RUN pip install \
     --prefix=/install \
     ./packages/core \
-    "./packages/infra[llm,chroma,mcp]" \
+    ./packages/agents \
+    "./packages/infra[llm,chroma,mcp,sessions]" \
     ./services/api \
     ./services/mcp-scholar
 

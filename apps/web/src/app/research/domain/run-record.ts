@@ -18,6 +18,8 @@ export interface RunSummary {
   channel?: 'web' | 'a2a' | 'session';
   a2a_task_id?: string | null;
   guardrails?: GuardEvent[];
+  /** Conversación de la consola a la que pertenece (ADR-014); ausente en ejecuciones antiguas. */
+  conversation_id?: string | null;
 }
 
 /** Agente (orquestador o worker) que actuó en una ejecución, con su esfuerzo. */

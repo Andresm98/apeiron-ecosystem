@@ -26,7 +26,8 @@ DEFAULT_STANCE = {
     "objection": "esa posición deja sin justificar su principio",
 }
 
-_INTERLOCUTOR_RE = re.compile(r"^- (?P<agent>\w+) \(ronda \d+\): (?P<text>.+)$", re.M)
+# Solo la línea bajo «Tu interlocutor…» (`dialogue_block`): el resto de la mesa es contexto, no a quién responde.
+_INTERLOCUTOR_RE = re.compile(r"Tu interlocutor acaba de sostener:\n- (?P<agent>\w+) \(ronda \d+\): (?P<text>.+)")
 _OBSERVATION_RE = re.compile(r"Observation: (?P<obs>.+?)(?:\n\n|\nThought|\Z)", re.S)
 _TRANSCRIPT_RE = re.compile(r"^r\d+ (?P<agent>\w+): (?P<text>.+)$", re.M)
 _COMMAND_RE = re.compile(r"^\s*(debate|contrasta|compara)\s*:\s*", re.I)

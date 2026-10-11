@@ -49,6 +49,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(chat.router)
     app.include_router(memory.router)
     app.include_router(runs.router)
+    app.include_router(runs.conversations_router)
     app.include_router(system.router)
     app.include_router(a2a.router)
     app.include_router(sessions.router)

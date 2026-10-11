@@ -12,6 +12,8 @@ MAX_STEPS = 8
 LANDMARKS = frozenset({"gnomon", "fire", "summit", "workshop", "garden", "temple", "library", "abacus", "well"})
 SIMULATION_KEYS = ("query", "thesis", "objection")
 _COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+# Identificador de una figura del catálogo de la Polis (`characters/manifest.json`); cuál existe lo decide la web.
+_FIGURE_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,7 @@ class Residence:
     landmark: str = "temple"
     color: str = "#c7889e"
     epithet: str = ""  # una línea que lo presenta al acercarse
+    figure: str = ""  # su aspecto (estatua, personaje animado…); vacío = el de su clase
 
 
 @dataclass(frozen=True)
@@ -82,6 +85,8 @@ def validate_spec(spec: AgentSpec) -> None:
         problems.append(f"residence.landmark debe ser uno de {sorted(LANDMARKS)}")
     if not _COLOR_RE.match(spec.residence.color):
         problems.append("residence.color debe ser #rrggbb")
+    if spec.residence.figure and not _FIGURE_RE.match(spec.residence.figure):
+        problems.append("residence.figure debe cumplir ^[a-z][a-z0-9_]{0,31}$")
     if missing := [k for k in SIMULATION_KEYS if spec.simulation and not spec.simulation.get(k)]:
         problems.append(f"simulation incompleta: falta {', '.join(missing)}")
     if problems:

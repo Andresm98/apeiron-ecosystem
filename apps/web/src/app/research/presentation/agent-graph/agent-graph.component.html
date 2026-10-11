@@ -1,6 +1,6 @@
 <svg
   class="graph"
-  [attr.viewBox]="'0 0 ' + W + ' ' + H"
+  [attr.viewBox]="'0 0 ' + W() + ' ' + H"
   role="img"
   aria-label="Grafo de ejecución: Ápeiron enruta, supervisa y sintetiza; los workers razonan y usan herramientas"
 >
@@ -11,40 +11,40 @@
   </defs>
 
   <!-- Aristas -->
-  <path [attr.class]="edgeClass(START, 'apeiron_router')" [attr.d]="curve(cx, 14, cx, y.router)" marker-end="url(#arrow)" />
+  <path [attr.class]="edgeClass(START, 'apeiron_router')" [attr.d]="curve(cx(), 14, cx(), y.router)" marker-end="url(#arrow)" />
   @for (wk of workers(); track wk.name) {
     <path
       [attr.class]="edgeClass('apeiron_router', wk.name) + ' edge-conditional'"
-      [attr.d]="curve(cx, y.router + y.box, wk.cx, y.worker)"
+      [attr.d]="curve(cx(), y.router + y.box, wk.cx, y.worker)"
       marker-end="url(#arrow)"
     />
     <path
       [attr.class]="edgeClass(wk.name, 'apeiron_supervisor')"
-      [attr.d]="curve(wk.cx - 10, y.worker + y.workerH, cx - 12, y.supervisor)"
+      [attr.d]="curve(wk.cx - 10, y.worker + y.workerH, cx() - 12, y.supervisor)"
       marker-end="url(#arrow)"
     />
     <path
       [attr.class]="edgeClass('apeiron_supervisor', wk.name) + ' edge-conditional'"
-      [attr.d]="curve(cx + 12, y.supervisor, wk.cx + 10, y.worker + y.workerH)"
+      [attr.d]="curve(cx() + 12, y.supervisor, wk.cx + 10, y.worker + y.workerH)"
       marker-end="url(#arrow)"
     />
   }
   <path
     [attr.class]="edgeClass('apeiron_supervisor', 'apeiron_synthesis') + ' edge-conditional'"
-    [attr.d]="curve(cx, y.supervisor + y.box, cx, y.synthesis)"
+    [attr.d]="curve(cx(), y.supervisor + y.box, cx(), y.synthesis)"
     marker-end="url(#arrow)"
   />
-  <path [attr.class]="edgeClass('apeiron_synthesis', END)" [attr.d]="curve(cx, y.synthesis + y.box, cx, y.end - 8)" marker-end="url(#arrow)" />
+  <path [attr.class]="edgeClass('apeiron_synthesis', END)" [attr.d]="curve(cx(), y.synthesis + y.box, cx(), y.end - 8)" marker-end="url(#arrow)" />
 
   <!-- Terminales -->
-  <circle class="terminal" [attr.cx]="cx" cy="8" r="6" />
-  <circle class="terminal" [class.terminal-done]="edgeClass('apeiron_synthesis', END) !== 'edge'" [attr.cx]="cx" [attr.cy]="y.end" r="7" />
+  <circle class="terminal" [attr.cx]="cx()" cy="8" r="6" />
+  <circle class="terminal" [class.terminal-done]="edgeClass('apeiron_synthesis', END) !== 'edge'" [attr.cx]="cx()" [attr.cy]="y.end" r="7" />
 
   <!-- Ápeiron: orquestador -->
   <g [attr.class]="'node orchestrator status-' + status('apeiron_router')">
-    <rect [attr.x]="cx - 90" [attr.y]="y.router" width="180" [attr.height]="y.box" rx="4" />
-    <text [attr.x]="cx" [attr.y]="y.router + 15" class="node-title">Ápeiron · router</text>
-    <text [attr.x]="cx" [attr.y]="y.router + 27" class="node-sub">modo y participantes</text>
+    <rect [attr.x]="cx() - 90" [attr.y]="y.router" width="180" [attr.height]="y.box" rx="4" />
+    <text [attr.x]="cx()" [attr.y]="y.router + 15" class="node-title">Ápeiron · router</text>
+    <text [attr.x]="cx()" [attr.y]="y.router + 27" class="node-sub">modo y participantes</text>
   </g>
 
   @for (wk of workers(); track wk.name) {
@@ -87,15 +87,15 @@
   }
 
   <g [attr.class]="'node orchestrator status-' + status('apeiron_supervisor')">
-    <rect [attr.x]="cx - 90" [attr.y]="y.supervisor" width="180" [attr.height]="y.box" rx="4" />
-    <text [attr.x]="cx" [attr.y]="y.supervisor + 15" class="node-title">Ápeiron · supervisor</text>
-    <text [attr.x]="cx" [attr.y]="y.supervisor + 27" class="node-sub">siguiente orador o cierre · {{ visits('apeiron_supervisor') }}×</text>
+    <rect [attr.x]="cx() - 90" [attr.y]="y.supervisor" width="180" [attr.height]="y.box" rx="4" />
+    <text [attr.x]="cx()" [attr.y]="y.supervisor + 15" class="node-title">Ápeiron · supervisor</text>
+    <text [attr.x]="cx()" [attr.y]="y.supervisor + 27" class="node-sub">siguiente orador o cierre · {{ visits('apeiron_supervisor') }}×</text>
   </g>
 
   <g [attr.class]="'node orchestrator status-' + status('apeiron_synthesis')">
-    <rect [attr.x]="cx - 90" [attr.y]="y.synthesis" width="180" [attr.height]="y.box" rx="4" />
-    <text [attr.x]="cx" [attr.y]="y.synthesis + 15" class="node-title">Ápeiron · síntesis</text>
-    <text [attr.x]="cx" [attr.y]="y.synthesis + 27" class="node-sub">acuerdos y desacuerdos</text>
+    <rect [attr.x]="cx() - 90" [attr.y]="y.synthesis" width="180" [attr.height]="y.box" rx="4" />
+    <text [attr.x]="cx()" [attr.y]="y.synthesis + 15" class="node-title">Ápeiron · síntesis</text>
+    <text [attr.x]="cx()" [attr.y]="y.synthesis + 27" class="node-sub">acuerdos y desacuerdos</text>
   </g>
 </svg>
 

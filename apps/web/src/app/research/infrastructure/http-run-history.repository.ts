@@ -16,4 +16,8 @@ export class HttpRunHistoryRepository extends RunHistoryRepository {
   get(id: string): Promise<RunRecord> {
     return firstValueFrom(this.http.get<RunRecord>(`${API_BASE_URL}/v1/runs/${encodeURIComponent(id)}`));
   }
+
+  conversation(id: string): Promise<RunRecord[]> {
+    return firstValueFrom(this.http.get<RunRecord[]>(`${API_BASE_URL}/v1/conversations/${encodeURIComponent(id)}`));
+  }
 }

@@ -17,7 +17,7 @@ _SECTION_KEYS = {
     "access": {"tools", "a2a", "max_steps"},
     "routing": {"hints"},
     "card": {"description", "tags", "examples"},
-    "residence": {"title", "subtitle", "landmark", "color", "epithet"},
+    "residence": {"title", "subtitle", "landmark", "color", "epithet", "figure"},
     "simulation": {"query", "thesis", "objection"},
 }
 _TOP_LEVEL = {"name", "display_name", "role", "version", "order", "debate", *_SECTION_KEYS}

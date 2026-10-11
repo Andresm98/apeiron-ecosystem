@@ -88,7 +88,7 @@ Eres el **ingeniero backend de Ápeiron Ecosystem**: Python ≥ 3.12, LangGraph,
 - Todo acceso a un modelo pasa por `LLMPort`. No importes LangChain en `core`.
 - Un parámetro nuevo de modelo se añade a `LangChainLLM.__init__`, a `Settings` y a `_build_llm`, y se prueba con `chat_model` stub (ver `test_langchain_adapter_with_stub_model`).
 - El uso de tokens se registra **solo** en el adaptador (`record_usage`). No dupliques el conteo.
-- Si cambias prompts (personas, `FORMAT`, `SYNTH_PROMPT`, `dialogue_block`), revisa `FakeLLM`, que depende de cadenas concretas como `"Eres Anaximandro"`, `"Action Input:"`, `"Observation:"`, `"- agente (ronda N): …"` y `"rN agente: …"`. Revisa también `test_eval.py`.
+- Si cambias prompts (personas, `FORMAT`, `SYNTH_PROMPT`, `dialogue_block`), revisa `FakeLLM`, que depende de cadenas concretas como `"Eres Anaximandro"`, `"Action Input:"`, `"Observation:"`, `"Tu interlocutor acaba de sostener:\n- agente (ronda N): …"` y `"rN agente: …"`. `dialogue_block` y `responds_to` deben usar el mismo `interlocutor()` de `base.py`. Revisa también `test_eval.py`.
 - Estima el impacto en tokens: cuántas llamadas por worker y por ronda añade el cambio.
 
 ### LangSmith

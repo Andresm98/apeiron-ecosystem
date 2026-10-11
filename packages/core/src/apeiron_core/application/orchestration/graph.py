@@ -26,7 +26,7 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
-from apeiron_core.application.agents.base import stream_emitter
+from apeiron_core.application.agents.base import interlocutor, stream_emitter
 from apeiron_core.application.guardrails import BLOCKED_ANSWER, apply_guardrail
 from apeiron_core.application.orchestration.control import (
     HUMAN,
@@ -102,14 +102,15 @@ def _worker_node(
                             "question": state["question"],
                             "history": history,
                             "round": state["round"],
+                            "context": state.get("context", ""),
                         }
                     )
                     text = str(out.get("answer", ""))
                     degraded = bool(out.get("failed"))
                 else:
-                    text = await agent.respond(
-                        state["question"], history, stream_emitter()
-                    )
+                    context = state.get("context", "")
+                    question = f"{state['question']}\n\n{context}" if context else state["question"]
+                    text = await agent.respond(question, history, stream_emitter())
         except TimeoutError:
             text = f"[{name} no respondió dentro de {node_timeout_s:.0f}s]"
             degraded = True
@@ -140,16 +141,12 @@ def _worker_node(
                 "execution_time_ms": round((time.perf_counter() - started) * 1000, 1),
             },
         )
-        interlocutor = next(
-            (t["agent"] for t in reversed(history) if t["agent"] != name and not t["degraded"]),
-            None,
-        )
         turn: AgentTurn = {
             "agent": name,
             "round": state["round"],
             "text": text,
             "degraded": degraded,
-            "responds_to": interlocutor,
+            "responds_to": interlocutor(name, history),  # el mismo al que le pidió responder `dialogue_block`
         }
         return {
             "turns": [turn],
@@ -284,15 +281,13 @@ def build_graph(
         """Turno del usuario: pausa el grafo hasta que la sesión lo reanude con su texto (o sin él)."""
         rnd = state["round"]
         history = state.get("turns", [])
-        interlocutor = next(
-            (t["agent"] for t in reversed(history) if t["agent"] != HUMAN and not t["degraded"]), None
-        )
-        reply = interrupt({"kind": "human_turn", "round": rnd, "responds_to": interlocutor})
+        responds_to = interlocutor(HUMAN, history)
+        reply = interrupt({"kind": "human_turn", "round": rnd, "responds_to": responds_to})
         text = str(reply or "").strip()
         if not text:
             return {"trace": [f"[{HUMAN} Silent r{rnd}]"]}
         turn: AgentTurn = {
-            "agent": HUMAN, "round": rnd, "text": text, "degraded": False, "responds_to": interlocutor,
+            "agent": HUMAN, "round": rnd, "text": text, "degraded": False, "responds_to": responds_to,
         }
         return {"turns": [turn], "trace": [f"[{HUMAN} Speaking r{rnd}]"]}
 

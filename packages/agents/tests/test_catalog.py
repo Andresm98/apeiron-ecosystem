@@ -43,6 +43,7 @@ def test_packaged_catalog_loads_every_agent_in_order():
     feynman = specs[3]
     assert feynman.display_name == "Feynman" and feynman.persona.startswith("Eres Feynman")
     assert feynman.residence.landmark == "workshop" and feynman.card.examples
+    assert {spec.residence.figure for spec in specs} == {"philosopher"}  # los cinco pensadores son estatuas vivas
     assert "experimento" in feynman.routing_hints and feynman.simulation["thesis"]
 
 
@@ -53,6 +54,9 @@ def test_a_new_agent_is_just_a_folder(tmp_path: Path):
     assert not spec.debate and not spec.a2a and spec.order == 100
 
 
+BAD_FIGURE = MANIFEST.replace('landmark = "temple"', 'landmark = "temple"\nfigure = "Darth Vader"')
+
+
 @pytest.mark.parametrize(
     ("folder", "manifest", "persona", "error"),
     [
@@ -60,6 +64,7 @@ def test_a_new_agent_is_just_a_folder(tmp_path: Path):
         ("socrates", MANIFEST + "\nsecret = 1\n", "Eres Sócrates.", "claves desconocidas"),
         ("socrates", MANIFEST, "Eres un filósofo.", "nombrar al agente"),
         ("socrates", MANIFEST.replace('"temple"', '"castillo"'), "Eres Sócrates.", "landmark"),
+        ("socrates", BAD_FIGURE, "Eres Sócrates.", "figure"),
         ("socrates", MANIFEST.replace('["vector_memory_retriever"]', '"todas"'), "Eres Sócrates.", "lista"),
     ],
 )

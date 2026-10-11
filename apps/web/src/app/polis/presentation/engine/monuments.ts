@@ -200,15 +200,6 @@ export function fallenStatue(kind: 'head' | 'torso' | 'hand', size: number, seed
   return g;
 }
 
-/** Altar filosófico: bloque escalonado con un cuenco de fuego (la antorcha la dibuja `Torches`). */
-export function altar(size: number): Monument {
-  const g = new THREE.Group();
-  g.add(mesh(new THREE.BoxGeometry(size * 2.4, size * 0.4, size * 1.6), lambert(STONE_DARK), 0, size * 0.2, 0));
-  g.add(mesh(new THREE.BoxGeometry(size * 1.8, size * 0.9, size * 1.1), lambert(STONE), 0, size * 0.85, 0));
-  g.add(mesh(new THREE.BoxGeometry(size * 2, size * 0.18, size * 1.3), lambert(STONE_PALE), 0, size * 1.38, 0));
-  return { group: g, obstacles: [{ x: 0, z: 0, r: size * 1.3 }], torches: [new THREE.Vector3(0, size * 1.47, 0)] };
-}
-
 /** Une varios monumentos en uno (grupo, obstáculos y antorchas), con un desplazamiento opcional. */
 export function compose(parts: (Monument & { at?: THREE.Vector3; rotation?: number })[]): Monument {
   const group = new THREE.Group();

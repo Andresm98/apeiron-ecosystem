@@ -23,8 +23,9 @@ subtitle = "Prudencia, coste y consecuencias"
 landmark = "garden"
 color = "#6aa84f"
 epithet = "Lo suficiente basta; lo excesivo perturba"
+figure = "philosopher"
 
 [simulation]
-query = "prudencia consecuencias placer sufrimiento"
+query = "Epicuro prudencia consecuencias placer sufrimiento"
 thesis = "se juzga por sus consecuencias: vale si reduce el sufrimiento innecesario y su coste no supera lo que aporta"
 objection = "olvida el coste de sostenerla; lo suficiente basta y lo excesivo perturba"

@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import type { ChatEvent } from '../../research/domain/chat.ts';
 import type { AgentInfo } from '../../research/domain/topology.ts';
 import { cancelRun, failRun, reduceRunEvent, startRun } from '../../research/application/run-state.ts';
-import { AGORA_ID, HOME_ID, WORLD_SCALE, agoraSeats, arrivalPoint, isWalkable, layoutCity, nearestPlace, toolPlaceId } from './city-layout.ts';
+import {
+  AGORA_ID, HOME_ID, SANCTUARY, WORLD_SCALE, agoraSeats, arrivalPoint, hostSpot, isWalkable, layoutCity, nearestPlace,
+  toPlaceSpace, toolPlaceId,
+} from './city-layout.ts';
 import { citizenState, citizenStates, coreState, participants } from './citizen-state.ts';
 import { EMPTY_CURSOR, readSignals } from './signals.ts';
 
@@ -169,6 +172,28 @@ test('ssanax walks on islands and bridges, never into the void or through monume
   assert.ok(!isWalkable(places, 600, 600)); // el vacío
   assert.ok(!isWalkable(places, 0, 0)); // la tribuna del ágora
   for (const p of places) assert.ok(isWalkable(places, arrivalPoint(p).x, arrivalPoint(p).z), `llegada a ${p.id}`);
+});
+
+test('an agent sanctuary blocks its temple and monument but not the way to its host', () => {
+  const places = layoutCity(TWO);
+  for (const p of places.filter((q) => q.kind === 'agent')) {
+    const d = Math.hypot(p.x, p.z);
+    // Espacio de la isla → ciudad: +Z hacia el ágora, +X a su derecha (el giro con el que la orienta el motor).
+    const at = (x: number, z: number) => ({ x: p.x + x * (-p.z / d) + z * (-p.x / d), z: p.z + x * (p.x / d) + z * (-p.z / d) });
+    const ok = (x: number, z: number) => isWalkable(places, at(x, z).x, at(x, z).z);
+    const { temple, emblem, hostZ } = SANCTUARY;
+    assert.ok(!ok(0, temple.z), `${p.id}: dentro del templo`);
+    assert.ok(!ok(temple.halfWidth - 1, temple.z - temple.halfDepth + 1), `${p.id}: esquina trasera del templo`);
+    assert.ok(!ok(0, emblem.z), `${p.id}: dentro del monumento`);
+    assert.ok(ok(0, (temple.z + temple.halfDepth + emblem.z - emblem.radius) / 2), `${p.id}: entre la escalinata y el monumento`);
+    assert.ok(ok(temple.halfWidth + 3, temple.z), `${p.id}: el paseo junto al templo`);
+    assert.ok(ok(0, hostZ), `${p.id}: el anfitrión espera en suelo pisable`);
+    const host = hostSpot(p);
+    assert.ok(distance(host, at(0, hostZ)) < 0.05, `${p.id}: el anfitrión, delante del monumento`);
+    assert.ok(distance(host, { x: 0, z: 0 }) < d, `${p.id}: el anfitrión, del lado del ágora`);
+    const back = toPlaceSpace(p, at(2, -5).x, at(2, -5).z);
+    assert.ok(Math.abs(back.x - 2) < 1e-9 && Math.abs(back.z + 5) < 1e-9, `${p.id}: ida y vuelta al espacio de la isla`);
+  }
 });
 
 test('every bridge is walkable end to end, whatever the roster', () => {

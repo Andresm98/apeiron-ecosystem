@@ -12,6 +12,7 @@ El esquema de Postgres se gestiona **solo con migraciones** de la Supabase CLI
 | `20261005140000_scholarly_tool.sql` | ADR-011: añade `scholarly_search` (MCP académico) a las herramientas de `anaximandro` y `heraclito` en el catálogo |
 | `20261011120000_polis_sessions.sql` | ADR-013 (fases 2 a 4): `kind='human'` y filas `human`, `nietzsche`, `feynman` y `epicuro` en `agents`; canal `session`, columnas `agent_runs.config` (configuración de la deliberación) y `agent_runs.events` (cronología pública para el replay); `llm_calls`, `input_tokens` y `output_tokens` en `agent_executions`; `record_agent_run()` actualizada |
 | `20261011120001_agents_catalog.sql` | ADR-013 (catálogo de agentes): **generada** desde `packages/agents` con `python -m apeiron_agents migration`; upsert de los cinco workers (roles de las personas v2) y `active = false` para los que ya no tienen carpeta. No se edita a mano: `test_catalog.py` compara su huella con los manifiestos |
+| `20261011130000_console_conversations.sql` | ADR-014: `agent_runs.conversation_id` (hilo de la consola), índice parcial `(user_id, conversation_id, created_at)` y `record_agent_run()` actualizada. Sin políticas nuevas: las de `agent_runs` cubren la columna. **Aplicarla antes de desplegar la API** (`/v1/runs` selecciona la columna) |
 
 ## Uso con el proyecto en la nube
 

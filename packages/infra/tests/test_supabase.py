@@ -102,3 +102,36 @@ async def test_supabase_runs_repository_surfaces_http_errors():
             await repo.save({"question": "q", "agents": []})  # type: ignore[typeddict-item]
     finally:
         request_ctx.reset(token)
+
+
+async def test_supabase_conversation_reads_filter_by_user_and_conversation():
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.params["select"] == "question,answer,mode":
+            # Más reciente primero (como pide la consulta): el adaptador las devuelve en orden cronológico.
+            return httpx.Response(200, json=[{"question": "q2", "answer": "a2", "mode": "debate"},
+                                             {"question": "q1", "answer": "a1", "mode": "single"}])
+        return httpx.Response(200, json=[{"id": "r1"}, {"id": "r2"}])
+
+    repo = SupabaseRunRepository(URL, "k", httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    conversation = "6f1c0a8e-6a4b-4d55-9b1e-0c3c1f7a2b11"
+    token = request_ctx.set(replace(request_ctx.get(), user_id=USER, access_token="user-jwt"))
+    try:
+        runs = await repo.conversation(conversation)
+        exchanges = await repo.exchanges(conversation, 4)
+        await repo.append(conversation, exchanges[0])  # durable vía record_agent_run: no hace otra petición
+    finally:
+        request_ctx.reset(token)
+
+    full, context = seen
+    assert len(seen) == 2
+    for request in seen:
+        assert request.url.params["conversation_id"] == f"eq.{conversation}"
+        assert request.url.params["user_id"] == f"eq.{USER}"
+        assert request.headers["authorization"] == "Bearer user-jwt"
+    assert full.url.params["order"] == "created_at.asc" and "agent_executions(" in full.url.params["select"]
+    assert context.url.params["status"] == "eq.completed" and context.url.params["limit"] == "4"
+    assert runs == [{"id": "r1"}, {"id": "r2"}]
+    assert [e["question"] for e in exchanges] == ["q1", "q2"]

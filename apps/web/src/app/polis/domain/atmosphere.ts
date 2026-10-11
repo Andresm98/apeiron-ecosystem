@@ -219,6 +219,8 @@ export interface RenderSettings {
   horizonRuins: number;
   /** Vegetación oscura y plantas bioluminiscentes por isla. */
   vegetation: number;
+  /** Agujero negro del cielo (pieza glTF de ~0,5 M triángulos, fiel al original): fuera en baja. */
+  blackHole: boolean;
   /** Ondulación del agua (se calcula en CPU: en baja el agua queda quieta). */
   waterMotion: boolean;
   /** Composer de postprocessing; en baja el tone mapping lo hace el propio renderer. */
@@ -252,6 +254,7 @@ export function renderSettings(level: Quality, ctx: RenderContext): RenderSettin
     stardust: high ? 6000 : medium ? 3500 : 1200,
     horizonRuins: high ? 160 : medium ? 110 : 50,
     vegetation: high ? 1 : medium ? 0.75 : 0.4,
+    blackHole: medium,
     waterMotion: medium && !ctx.reducedMotion,
     composer: medium,
     exposure: EXPOSURE,

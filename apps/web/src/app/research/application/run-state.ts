@@ -1,4 +1,4 @@
-import type { AgentStep, ChatEvent, GuardEvent, SessionEvent, Turn, Usage } from '../domain/chat.ts';
+import type { AgentStep, ChatEvent, GuardEvent, Mode, SessionEvent, Turn, Usage } from '../domain/chat.ts';
 import { type GraphRun, applyNodeEvent, emptyRun, settleRun } from '../domain/graph-run.ts';
 import type { RunRecord } from '../domain/run-record.ts';
 
@@ -22,6 +22,15 @@ export interface RunState {
   blocked: boolean;
   /** Última instantánea de la sesión deliberativa, si la ejecución es una sesión de la Polis (ADR-013). */
   session: SessionEvent | null;
+}
+
+/** Un intercambio del hilo de la consola (ADR-014): la pregunta, su modo y la ejecución que la respondió. */
+export interface Exchange {
+  question: string;
+  mode: Mode;
+  run: RunState;
+  /** Id de la ejecución guardada, si se reabrió del historial. */
+  runId?: string;
 }
 
 export function idleRun(): RunState {

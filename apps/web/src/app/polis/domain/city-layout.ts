@@ -26,6 +26,8 @@ export interface Place {
   color: string;
   /** Una línea que presenta al agente al acercarse (de su manifiesto). */
   epithet?: string;
+  /** Aspecto que declara su manifiesto (`figures.ts` decide cuál se usa si no existe). */
+  figure?: string;
 }
 
 /** Siluetas que un manifiesto puede pedir para su residencia; cualquier otra se dibuja como templo. */
@@ -65,6 +67,17 @@ const AGENT_RING = 52 * S;
 const FOREIGN_RING = 76 * S;
 /** Radio de la bema (tribuna central del ágora): hasta su borde se adelanta quien tiene la palabra. */
 export const BEMA_RADIUS = 2.4 * S;
+
+/**
+ * Santuario de un agente, en el espacio de su isla (+Z mira al ágora), como en un santuario griego: el templo al
+ * fondo con la escalinata hacia el puente, el monumento del agente delante como altar y el anfitrión recibiendo a
+ * quien llega. Ni el templo ni el monumento se atraviesan.
+ */
+export const SANCTUARY = {
+  temple: { z: -2.75 * S, halfWidth: 3.35 * S, halfDepth: 3.9 * S },
+  emblem: { z: 4 * S, radius: 1.5 * S },
+  hostZ: 6.5 * S,
+} as const;
 
 const round = (n: number) => Math.round(n * 100) / 100;
 const polar = (radius: number, angle: number) => ({ x: round(radius * Math.cos(angle)), z: round(radius * Math.sin(angle)) });
@@ -135,6 +148,7 @@ export function layoutCity(agents: AgentInfo[], player = 'ssanax'): Place[] {
       radius: 8 * S,
       color: home && COLOR_RE.test(home.color) ? home.color : FALLBACK_COLORS[i % FALLBACK_COLORS.length]!,
       ...(home?.epithet ? { epithet: home.epithet } : {}),
+      ...(home?.figure ? { figure: home.figure } : {}),
     });
   });
   remotes.forEach((a, i) => {
@@ -183,10 +197,42 @@ export function agoraSeats(agents: string[]): Record<string, { x: number; z: num
 
 /** Ancho de los puentes que unen cada isla con el ágora. */
 export const BRIDGE_WIDTH = 2 * S;
-/** Radio del monumento central de cada isla: no se atraviesa. */
+/** Radio del monumento central de cada isla: no se atraviesa. Los santuarios de agente siguen `SANCTUARY`. */
 const MONUMENT_RADIUS: Partial<Record<PlaceKind, number>> = {
-  agora: BEMA_RADIUS, agent: 2.4 * S, foreign: 1.8 * S, tool: 2.6 * S, home: 2 * S, archive: 2.2 * S, beacon: 1.6 * S,
+  agora: BEMA_RADIUS, foreign: 1.8 * S, tool: 2.6 * S, home: 2 * S, archive: 2.2 * S, beacon: 1.6 * S,
 };
+
+/**
+ * Punto de la ciudad en el espacio de una isla: origen en su centro y +Z hacia el ágora (el giro con el que el
+ * motor la orienta). El ágora no gira.
+ */
+export function toPlaceSpace(place: Place, x: number, z: number): { x: number; z: number } {
+  const dx = x - place.x;
+  const dz = z - place.z;
+  if (place.kind === 'agora') return { x: dx, z: dz };
+  const yaw = Math.atan2(-place.x, -place.z);
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  return { x: dx * c - dz * s, z: dx * s + dz * c };
+}
+
+/** ¿Pisa (x, z) el templo o el monumento del santuario de un agente? */
+function inSanctuary(place: Place, x: number, z: number): boolean {
+  const local = toPlaceSpace(place, x, z);
+  const { temple, emblem } = SANCTUARY;
+  const inTemple = Math.abs(local.x) < temple.halfWidth && Math.abs(local.z - temple.z) < temple.halfDepth;
+  return inTemple || Math.hypot(local.x, local.z - emblem.z) < emblem.radius;
+}
+
+/**
+ * Dónde espera el anfitrión de un lugar con agente: en el santuario, delante de su monumento, de cara al puente;
+ * en un puerto, cerca del centro del lado del ágora.
+ */
+export function hostSpot(place: Place): { x: number; z: number } {
+  const d = Math.hypot(place.x, place.z) || 1;
+  const k = place.kind === 'agent' ? SANCTUARY.hostZ : place.radius * 0.45;
+  return { x: round(place.x - (place.x / d) * k), z: round(place.z - (place.z / d) * k) };
+}
 
 function distanceToSegment(px: number, pz: number, ax: number, az: number, bx: number, bz: number): number {
   const dx = bx - ax;
@@ -202,7 +248,9 @@ export function isWalkable(places: Place[], x: number, z: number): boolean {
     (p) => p.kind !== 'agora' && distanceToSegment(x, z, 0, 0, p.x, p.z) <= BRIDGE_WIDTH / 2 - 0.3,
   );
   if (!onIsland && !onBridge) return false;
-  return !places.some((p) => Math.hypot(x - p.x, z - p.z) < (MONUMENT_RADIUS[p.kind] ?? 0));
+  return !places.some((p) => p.kind === 'agent'
+    ? inSanctuary(p, x, z)
+    : Math.hypot(x - p.x, z - p.z) < (MONUMENT_RADIUS[p.kind] ?? 0));
 }
 
 /** Lugar con el que se puede interactuar desde (x, z): el más cercano a menos de su radio + 4 m. */

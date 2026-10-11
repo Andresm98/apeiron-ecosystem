@@ -7,6 +7,10 @@ export interface ChatRequest {
   simulate?: boolean; // LLM determinista: recorre todo el grafo con 0 tokens
   /** Interlocutor elegido (ADR-013): fuerza el modo `single`. */
   agent?: string;
+  /** Mesa del debate en orden de palabra (ADR-014): fuerza el modo `debate`. */
+  participants?: string[];
+  /** Hilo de la consola (ADR-014): los agentes ven los intercambios previos. */
+  conversation_id?: string;
 }
 
 export interface Turn {

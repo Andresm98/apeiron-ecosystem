@@ -24,8 +24,9 @@ subtitle = "Primeros principios y el primer mapa del mundo"
 landmark = "gnomon"
 color = "#d9a441"
 epithet = "Mide la sombra para hallar el principio"
+figure = "philosopher"
 
 [simulation]                        # postura del FakeLLM (0 tokens)
 query = "Anaximandro ápeiron indeterminado principio de los opuestos"
 thesis = "se explica desde el ápeiron: un fondo indeterminado del que surgen los opuestos y al que regresan, pagando su injusticia según el orden del tiempo"
-objection = "un flujo sin fondo no explica de dónde surgen los opuestos; el cambio necesita un principio ilimitado que lo preceda"
+objection = "se queda en uno de los opuestos y lo toma por principio; falta el fondo común e ilimitado del que proceden ambos y el límite que los equilibra"

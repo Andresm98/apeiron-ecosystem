@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -15,22 +16,32 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+AGENT_PATTERN = r"^[a-z][a-z0-9_]{1,40}$"
+
+
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     mode: Mode | None = None
     max_rounds: int | None = Field(default=None, ge=1, le=4)
     simulate: bool = False  # LLM determinista: recorre todo el grafo con 0 tokens
     # Interlocutor elegido (ADR-013): fuerza el modo `single`. La ruta lo valida contra la topología.
-    agent: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]{1,40}$")
+    agent: str | None = Field(default=None, pattern=AGENT_PATTERN)
+    # Mesa del debate, en orden de palabra (ADR-014): fuerza el modo `debate`. La ruta la valida contra la topología.
+    participants: list[Annotated[str, Field(pattern=AGENT_PATTERN)]] | None = Field(
+        default=None, min_length=1, max_length=6
+    )
+    # Hilo de la consola (ADR-014): los agentes ven los intercambios previos del mismo usuario en esa conversación.
+    conversation_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
-    def _agent_only_single(self) -> "ChatRequest":
-        if self.agent is not None and self.mode == "debate":
+    def _coherent(self) -> "ChatRequest":
+        if self.agent is not None and (self.mode == "debate" or self.participants):
             raise ValueError("agent solo aplica en modo single")
+        if self.participants is not None and self.mode == "single":
+            raise ValueError("participants solo aplica en modo debate")
+        if self.participants is not None and len(set(self.participants)) != len(self.participants):
+            raise ValueError("participants no admite repetidos")
         return self
-
-
-AGENT_PATTERN = r"^[a-z][a-z0-9_]{1,40}$"
 
 
 class SessionRequest(BaseModel):

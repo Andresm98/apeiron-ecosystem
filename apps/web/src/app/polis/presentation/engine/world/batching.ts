@@ -4,8 +4,9 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 /**
  * Lotes estáticos (ADR-013 §5.7): las mallas fijas de un lugar que comparten aspecto se fusionan en una sola, así
  * cada pieza no cuesta un draw call en el pase de color y otro en el de sombras. Se respeta lo que no puede
- * fusionarse: lo animado (`userData.dynamic` en la malla o en un ancestro), lo translúcido y lo que tiene otro
- * papel (suelo, oclusor, proyecta sombra o no). El lote es por lugar: la selección y la oclusión siguen funcionando.
+ * fusionarse: lo animado (`userData.dynamic` en la malla o en un ancestro), las piezas glTF cuya geometría comparten
+ * varios lugares (`userData.shared`), lo translúcido y lo que tiene otro papel (suelo, oclusor, proyecta sombra o
+ * no). El lote es por lugar: la selección y la oclusión siguen funcionando.
  * Devuelve cuántas mallas se ahorraron.
  */
 export function batchStatic(root: THREE.Object3D): number {
@@ -50,7 +51,7 @@ export function batchStatic(root: THREE.Object3D): number {
 }
 
 function isDynamic(object: THREE.Object3D, root: THREE.Object3D): boolean {
-  for (let o: THREE.Object3D | null = object; o && o !== root; o = o.parent) if (o.userData['dynamic']) return true;
+  for (let o: THREE.Object3D | null = object; o && o !== root; o = o.parent) if (o.userData['dynamic'] || o.userData['shared']) return true;
   return false;
 }
 

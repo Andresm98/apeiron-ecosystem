@@ -9,3 +9,5 @@
 **/.pytest_cache
 **/.mypy_cache
 **/.ruff_cache
+# Originales y fuentes de los modelos 3D (no los usa el build: la web sirve apps/web/public/)
+apps/web/src/assets/models

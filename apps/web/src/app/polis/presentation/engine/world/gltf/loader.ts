@@ -75,8 +75,8 @@ function bake(material: THREE.Material): THREE.Material {
   return basic;
 }
 
-/** Sustituye `<base>_lod0..2` por un `THREE.LOD` en la posición de lod0 (distancias 0 / 35 / 70 m). */
-function buildLod(root: THREE.Group, base: string): void {
+/** Sustituye `<base>_lod0..2` por un `THREE.LOD` en la posición de lod0 (por defecto, a 0 / 35 / 70 m). */
+export function buildLod(root: THREE.Object3D, base: string, distances: readonly number[] = LOD_DISTANCES): void {
   const levels: THREE.Object3D[] = [];
   root.traverse((o) => {
     const { base: b, lod } = splitLod(o.name.replace(/\.\d{3}$/, ''));
@@ -96,6 +96,6 @@ function buildLod(root: THREE.Group, base: string): void {
     level.position.set(0, 0, 0);
     level.quaternion.identity();
     level.scale.set(1, 1, 1);
-    lod.addLevel(level, LOD_DISTANCES[i]);
+    lod.addLevel(level, distances[i]);
   });
 }

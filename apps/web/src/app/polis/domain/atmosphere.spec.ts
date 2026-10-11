@@ -62,6 +62,8 @@ test('render settings follow the ADR table and keep the scene legible', () => {
   assert.equal(low.shadowMapSize, 0);
   assert.equal(low.dof, null);
   assert.equal(low.pixelRatioMax, 1);
+  assert.equal(low.blackHole, false); // el agujero negro, fiel al original, es demasiado pesado para la baja
+  assert.ok(renderSettings('medium', free).blackHole && renderSettings('high', free).blackHole);
   assert.ok(low.stardust < renderSettings('medium', free).stardust && renderSettings('medium', free).stardust < renderSettings('high', free).stardust);
   const medium = renderSettings('medium', free);
   assert.equal(medium.shadowMapSize, 1024);

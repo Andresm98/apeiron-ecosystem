@@ -72,3 +72,32 @@ Con todo lo estático horneado, el coste de un landmark es su número de materia
    (KTX2 llegará con el transcoder Basis en la subfase 5e; hasta entonces, WebP.)
 5. Copiar a `apps/web/public/assets/polis/landmarks/agora.glb` y añadir `"agora"` a `manifest.json`. La ciudad solo pide los landmarks listados.
 6. Comprobar en `/polis?perf&quality=high`: el lugar debe verse con su glTF, la consola sin `landmark_fallback` y el overlay dentro de presupuesto. Si declara `fixed_*` o `sensor_*`, la física pasa a Rapier (se descarga su WASM, unos 1,2 MB comprimidos, solo entonces).
+
+## 5. Piezas: modelos dentro de un lugar procedural
+
+Un landmark sustituye el lugar entero, isla incluida. Una **pieza** (`prop`) sustituye solo una parte y conserva la isla, el puente, las antorchas y el color del lugar. Sirve para modelos de terceros que no traen isla, o para uno que se repite en varios lugares ([ADR-013](../adr/0013-polis-agentic-world.md#piezas-gltf-santuarios-serpiente-y-agujero-negro-2026-10-11)).
+
+| Pieza | Sustituye a | Hueco |
+|---|---|---|
+| `temple` | El peristilo de cada santuario de agente | Rectángulo `SANCTUARY.temple` (≈ 22 × 26 m), escalinata hacia el ágora |
+| `serpent` | La bema del ágora | Círculo de `BEMA_RADIUS` (≈ 16 m de diámetro) |
+| `black_hole` | Nada: se suma al cielo | Astro a 1,5 km de la cámara, sin niebla, con luz de estudio propia (`RoomEnvironment`); fuera en calidad baja |
+
+**Contrato del asset:**
+
+- Escena con `extras.apeiron = {"prop": "<nombre>", "version": 1}`. El nombre debe coincidir con el fichero.
+- Suelo en y = 0 y frente hacia **+Z**. La escala y el centrado dan igual: `fitProp` ajusta la pieza a su hueco con escala uniforme.
+- Niveles de detalle opcionales con nodos `<base>_lod0/_lod1/_lod2`, a 0, 60 y 120 m (`PROP_LOD_DISTANCES`).
+- Materiales normales (`MeshStandardMaterial`), iluminados por la luna, las antorchas y la luz de los agentes. Una textura con la luz del día metida en el color se apaga antes de publicar.
+
+**Publicar:** copiar el glb a `apps/web/public/assets/polis/props/` y añadir su nombre a `props/manifest.json`. Si la carga falla o los `extras` no cuadran, la consola avisa con `prop_fallback` y el hueco conserva su versión procedural. Verificar con `?perf`: los triángulos se cuentan con el pase de sombras.
+
+**Pipeline usado con los modelos de Sketchfab** (glTF-Transform y meshoptimizer en Node; `@gltf-transform/functions` y `sharp` en procesos separados, porque cargan dos libvips y chocan):
+
+1. **Geometría:** aplanar transformaciones (`flatten`, `clearNodeTransform`) y unir por material (`join`). Recortar lo que sobra por el centroide de cada triángulo (la explanada del escaneo del templo) y centrar con el suelo en y = 0 y el frente en +Z. Simplificar con `simplify` (`weld` antes) para el LOD cercano. Para el lejano, `simplifySloppy` de meshoptimizer ≥ 0.23: los escaneos y los anillos están llenos de costuras de UV que frenan al simplificador normal.
+2. **Texturas** (con `sharp`): redimensionar a 2048 o 1024 px, apagar brillo y saturación si traen luz horneada y guardar en WebP. Quitar el emisivo que Sketchfab usa como «sin luz» (emisivo = color base).
+3. **Empaquetar:** `extras` de la pieza y `meshopt` (nivel medio).
+
+Un modelo con `KHR_materials_pbrSpecularGlossiness` (Sketchfab antiguo) se pasa antes a metal/rugosidad con `metalRough()`: three ya no carga esa extensión.
+
+**Antes de simplificar, comparar.** Renderizar original y simplificado con la misma cámara y la misma luz. Con el agujero negro, hasta una simplificación conservadora dentaba los discos y la *sloppy* lo deformó: se publicó intacto.

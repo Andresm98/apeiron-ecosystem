@@ -23,8 +23,9 @@ subtitle = "Genealogía y crítica de valores"
 landmark = "summit"
 color = "#8a6cc0"
 epithet = "Pregunta a quién sirve cada verdad"
+figure = "philosopher"
 
 [simulation]
-query = "genealogía de los valores supuestos ocultos"
+query = "Nietzsche genealogía de los valores supuestos ocultos"
 thesis = "esconde una genealogía: antes de responder hay que preguntar qué valor la sostiene y a quién sirve esa respuesta"
 objection = "esa tesis presupone el valor que pretende fundar; la pregunta misma es un síntoma"

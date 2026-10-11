@@ -167,6 +167,7 @@ def test_agents_endpoint_describes_topology(client):
     assert feynman["residence"] == {
         "title": "El Taller", "subtitle": "Modelos causales y experimentos", "landmark": "workshop",
         "color": "#3f8fc4", "epithet": "Si no puede explicarse con sencillez, no se entiende",
+        "figure": "philosopher",
     }
 
 
@@ -193,3 +194,34 @@ def test_validation_rejects_bad_rounds(client):
 def test_runtime_settings_enforce_hard_limits(override):
     with pytest.raises(ValidationError):
         Settings(_env_file=None, **override)
+
+
+def test_chat_debate_with_a_chosen_table(client):
+    headers = auth_headers(client)
+    body = {"question": "¿Es real el tiempo?", "participants": ["feynman", "nietzsche", "epicuro"], "max_rounds": 1}
+    r = client.post("/v1/chat", json={**body, "simulate": True}, headers=headers)
+    assert r.status_code == 200
+    out = r.json()
+    assert out["mode"] == "debate" and [t["agent"] for t in out["turns"]] == ["feynman", "nietzsche", "epicuro"]
+    for bad in (
+        {**body, "participants": ["socrates"]},  # no está en la topología
+        {**body, "participants": ["human"]},  # el humano solo participa en sesiones
+        {**body, "participants": ["feynman", "feynman"]},
+        {**body, "agent": "feynman"},
+        {**body, "mode": "single"},
+    ):
+        assert client.post("/v1/chat", json=bad, headers=headers).status_code == 422
+
+
+def test_chat_follow_up_in_a_local_conversation(client):
+    headers = auth_headers(client)
+    conversation = "6f1c0a8e-6a4b-4d55-9b1e-0c3c1f7a2b11"
+    for question in ("¿Qué es el ápeiron?", "¿Y qué diría Heráclito?"):
+        body = {"question": question, "simulate": True, "conversation_id": conversation}
+        assert client.post("/v1/chat", json=body, headers=headers).status_code == 200
+    store = client.app.state.container.facade._conversations
+    assert len(store._data) == 1 and len(next(iter(store._data.values()))) == 2
+    # Sin Supabase no hay historial que leer: la conversación vive solo en el proceso.
+    assert client.get(f"/v1/conversations/{conversation}", headers=headers).status_code == 404
+    bad = {"question": "q", "conversation_id": "no-es-uuid"}
+    assert client.post("/v1/chat", json=bad, headers=headers).status_code == 422

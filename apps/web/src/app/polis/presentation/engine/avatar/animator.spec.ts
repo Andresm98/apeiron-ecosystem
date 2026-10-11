@@ -31,6 +31,27 @@ test('walking swings opposite legs and arms, and the hips dip on each footfall',
   assert.ok(bone(stride(0.25, 1), 'spine')[0] > bone(stride(0.25, 0), 'spine')[0], 'al correr se inclina más');
 });
 
+test('a glTF avatar brings its own stride: longer cycles, fewer footsteps over the same distance', () => {
+  const steps = (a: Animator) => run(a, 4, { speed: WALK_SPEED }).flatMap((f) => f.events).filter((e) => e.kind === 'step').length;
+  const long = new Animator();
+  long.setStride({ walk: 4.03, run: 6.72 }); // el doble que el rig procedural (2,016 m por ciclo)
+  const base = steps(new Animator());
+  assert.ok(Math.abs(steps(long) * 2 - base) <= 2, `doble zancada, mitad de pasos (${base} → ${steps(long)})`);
+  long.setStride({ walk: 0, run: 1 }); // inválida: se ignora
+  assert.ok(Math.abs(steps(long) * 2 - base) <= 2);
+});
+
+test('the flight progress goes from take-off to landing and is zero on the ground', () => {
+  const a = new Animator();
+  assert.equal(a.update(input()).weights.air, 0);
+  assert.equal(a.update(input({ grounded: false, vy: 7 })).weights.air, 0);
+  assert.equal(a.update(input({ grounded: false, vy: 0 })).weights.air, 0.5);
+  assert.equal(a.update(input({ grounded: false, vy: -7 })).weights.air, 1);
+  assert.equal(a.update(input()).weights.air, 0);
+  // Caer de un borde, sin impulso: la mitad descendente.
+  assert.equal(a.update(input({ grounded: false, vy: 0 })).weights.air, 0.5);
+});
+
 test('feet do not slide: footsteps follow distance, not time', () => {
   const slow = run(new Animator(), 4, { speed: WALK_SPEED / 2 }).flatMap((f) => f.events).filter((e) => e.kind === 'step');
   const fast = run(new Animator(), 4, { speed: WALK_SPEED }).flatMap((f) => f.events).filter((e) => e.kind === 'step');

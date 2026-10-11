@@ -26,6 +26,9 @@ class MemoryRuns:
     async def get(self, run_id: str):
         return {"id": run_id, **self.saved[0]} if self.saved else None
 
+    async def conversation(self, conversation_id: str, limit: int = 50):
+        return [r for r in self.saved if r.get("conversation_id") == conversation_id]
+
 
 def supabase_token(**overrides: object) -> str:
     claims = {"sub": USER, "aud": "authenticated", "iss": f"{URL}/auth/v1", "exp": int(time.time()) + 300}
@@ -89,3 +92,17 @@ def test_chat_run_is_persisted_and_listed_for_the_user(client):
 def test_supabase_provider_requires_url_and_key():
     with pytest.raises(ValidationError, match="APEIRON_SUPABASE_URL"):
         Settings(_env_file=None, auth_provider="supabase")
+
+
+def test_conversation_is_persisted_and_read_back_in_order(client):
+    headers = {"Authorization": f"Bearer {supabase_token()}"}
+    conversation = "6f1c0a8e-6a4b-4d55-9b1e-0c3c1f7a2b11"
+    for question in ("¿Qué es el ápeiron?", "¿Y el fuego de Heráclito?"):
+        body = {"question": question, "simulate": True, "conversation_id": conversation}
+        assert client.post("/v1/chat", json=body, headers=headers).status_code == 200
+    r = client.get(f"/v1/conversations/{conversation}", headers=headers)
+    assert r.status_code == 200
+    assert [run["question"] for run in r.json()] == ["¿Qué es el ápeiron?", "¿Y el fuego de Heráclito?"]
+    missing = client.get("/v1/conversations/00000000-0000-0000-0000-000000000000", headers=headers)
+    assert missing.status_code == 404
+    assert client.get("/v1/conversations/no-es-uuid", headers=headers).status_code == 422

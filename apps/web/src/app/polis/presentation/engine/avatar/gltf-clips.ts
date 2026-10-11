@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { ClipWeights } from './animator.ts';
+import type { ClipWeights, Stride } from './animator.ts';
 import type { Gesture } from './clips.ts';
 
 /**
@@ -38,7 +38,8 @@ export interface ActionState { weight: number; time: number | null; }
 
 /**
  * Peso y tiempo de cada acción para un fotograma del animador. Caminar y correr se sincronizan con la fase (los
- * pies del modelo no patinan); los gestos de una vez, con su progreso. `time = null` = dejar que el mixer avance.
+ * pies del modelo no patinan); el salto, con el progreso del vuelo (el clip es solo el tramo en el aire); los gestos
+ * de una vez, con su progreso. `time = null` = dejar que el mixer avance.
  */
 export function actionStates(w: ClipWeights, available: ReadonlySet<ClipKey>, durations: Partial<Record<ClipKey, number>>): Partial<Record<ClipKey, ActionState>> {
   const out: Partial<Record<ClipKey, ActionState>> = {};
@@ -53,10 +54,25 @@ export function actionStates(w: ClipWeights, available: ReadonlySet<ClipKey>, du
   put('idle', w.idle + (jumpKey ? 0 : w.jump), null);
   put('walk', w.walk, sync('walk'));
   put(runKey, w.run, sync(runKey));
-  if (jumpKey) put(jumpKey, w.jump, null);
+  if (jumpKey) put(jumpKey, w.jump, (durations[jumpKey] ?? 1) * w.air);
   if (w.gesture && available.has(w.gesture.name)) {
     const d = durations[w.gesture.name];
     out[w.gesture.name] = { weight: w.gesture.weight, time: w.gesture.progress > 0 && d ? d * w.gesture.progress : null };
   }
   return out;
+}
+
+/** Correr frente a caminar en el rig procedural (4 / 2,4 piernas por ciclo): si hay `Run` pero no su zancada. */
+const RUN_PER_WALK = 4 / 2.4;
+
+/**
+ * Zancada que declara el glb en los `extras` de su escena (`apeiron.stride.walk`/`run`, en alturas del modelo en
+ * reposo, la misma medida con la que se escala) llevada a metros. Sin `Run`, se corre con el ciclo de caminar.
+ */
+export function strideOf(extras: Record<string, unknown>, height: number, hasRun: boolean): Stride | undefined {
+  const declared = (extras['apeiron'] as { stride?: { walk?: unknown; run?: unknown } } | undefined)?.stride;
+  const walk = typeof declared?.walk === 'number' && declared.walk > 0 ? declared.walk * height : 0;
+  if (!walk) return undefined;
+  const run = typeof declared?.run === 'number' && declared.run > 0 ? declared.run * height : hasRun ? walk * RUN_PER_WALK : walk;
+  return { walk, run };
 }

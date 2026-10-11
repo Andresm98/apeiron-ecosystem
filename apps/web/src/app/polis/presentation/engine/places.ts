@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { PALETTE, agentTone } from '../../domain/atmosphere';
-import { BEMA_RADIUS, BRIDGE_WIDTH, Place, WORLD_SCALE } from '../../domain/city-layout';
+import { BEMA_RADIUS, BRIDGE_WIDTH, Place, SANCTUARY, WORLD_SCALE } from '../../domain/city-layout';
 import { energyStone, tileUv } from './cosmos/energy';
 import {
-  Monument, altar, colonnadeRing, compose, drum, fallenStatue, peristyle, rng, seedOf, steppedRim,
+  Monument, colonnadeRing, compose, drum, fallenStatue, peristyle, rng, seedOf, steppedRim,
 } from './monuments';
 import { batchStatic } from './world/batching';
+import { fitProp } from './world/gltf/props';
 
 /** Lugar construido: grupo seleccionable y, si tiene partes vivas, su animación ambiental. */
 export interface BuiltPlace {
@@ -26,6 +27,21 @@ export interface BuiltPlace {
 
 type Shape = Omit<BuiltPlace, 'obstacles' | 'torches'>;
 type Builder = (place: Place) => Shape;
+
+/** Piezas glTF disponibles (plantillas): sustituyen a su equivalente procedural sin tocar la isla. */
+export interface PlaceProps {
+  /** Templo de los santuarios de agente. */
+  temple?: THREE.Object3D;
+  /** Monumento central del ágora, en lugar de la bema. */
+  serpent?: THREE.Object3D;
+}
+
+/** El monumento de un agente, modelado a escala humana, se alza delante de su templo como altar del santuario. */
+const EMBLEM_SCALE = 1.15;
+/** Altura del templo del santuario (la del peristilo procedural; la del glTF sale de su ajuste). */
+const TEMPLE_HEIGHT = 12;
+/** Brillo propio de la serpiente del ágora: se lee de noche sin llegar al umbral del bloom. */
+const SERPENT_GLOW = 0.3;
 
 // La Polis en penumbra (ADR-013 §5.1): piedra erosionada, musgo, madera oscura y óxido.
 const STONE = PALETTE.stoneLight;
@@ -153,13 +169,27 @@ export function buildBridge(place: Place, agoraRadius: number): THREE.Group {
 }
 
 /**
- * Ágora: tholos colosal de 28 columnas de 22 m con el techo abierto al cosmos, bema en el centro y, flotando a
- * 30 m, el núcleo de Ápeiron con su anillo orbital. Lo que significa algo brilla; lo demás es piedra en penumbra.
+ * Ágora: tholos colosal de 28 columnas de 22 m con el techo abierto al cosmos, bema en el centro (o la serpiente
+ * enroscada, si se publica su glTF) y, flotando a 30 m, el núcleo de Ápeiron con su anillo orbital. Lo que
+ * significa algo brilla; lo demás es piedra en penumbra.
  */
-function agora(place: Place): Shape {
+function agora(place: Place, serpent?: THREE.Object3D): Shape {
   const g = new THREE.Group();
-  g.add(mesh(new THREE.CylinderGeometry(BEMA_RADIUS, BEMA_RADIUS * 1.08, 1.4, 24), lambert('#8d8574'), 0, 0.7, 0));
-  g.add(mesh(new THREE.CylinderGeometry(BEMA_RADIUS * 0.55, BEMA_RADIUS * 0.6, 1.2, 16), lambert('#6d675c'), 0, 2, 0));
+  if (serpent) {
+    // La serpiente enroscada ocupa la bema y brilla débilmente con el oro del logos, como las grietas del ágora.
+    const statue = fitProp(serpent, BEMA_RADIUS * 2, BEMA_RADIUS * 2);
+    statue.traverse((o) => {
+      const material = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (!material?.isMeshStandardMaterial) return;
+      material.emissive.set(PALETTE.logos);
+      material.emissiveMap = material.map;
+      material.emissiveIntensity = SERPENT_GLOW;
+    });
+    g.add(statue);
+  } else {
+    g.add(mesh(new THREE.CylinderGeometry(BEMA_RADIUS, BEMA_RADIUS * 1.08, 1.4, 24), lambert('#8d8574'), 0, 0.7, 0));
+    g.add(mesh(new THREE.CylinderGeometry(BEMA_RADIUS * 0.55, BEMA_RADIUS * 0.6, 1.2, 16), lambert('#6d675c'), 0, 2, 0));
+  }
   const core = new THREE.Mesh(
     new THREE.IcosahedronGeometry(3.6, 0),
     lambert(PALETTE.logos, { emissive: PALETTE.logos, emissiveIntensity: 0.5 }),
@@ -367,15 +397,34 @@ const BUILDERS: Record<Place['landmark'], Builder> = {
 };
 
 /**
- * Arquitectura monumental de cada lugar (espacio local, entrada en +Z hacia el ágora): el ágora es un tholos con
- * techo abierto; los santuarios de los agentes, peristilos sin techo con estatua derruida y altar; los edificios
- * menores, tholos de columnas.
+ * Santuario de un agente (`SANCTUARY`): el templo al fondo con la escalinata hacia el ágora (el glTF escaneado si
+ * se publica; si no, un peristilo sin techo del mismo tamaño) y antorchas a los lados de la escalinata. El
+ * monumento del agente lo coloca `buildPlace` delante. Lo que no se pisa lo decide `isWalkable`, no estos obstáculos.
  */
-function architecture(place: Place): Monument {
+function sanctuary(place: Place, temple: THREE.Object3D | undefined, seed: number): Monument {
+  const { z, halfWidth, halfDepth } = SANCTUARY.temple;
+  const building: Monument = temple
+    ? { group: fitProp(temple, halfWidth * 2, halfDepth * 2), obstacles: [], torches: [] }
+    : peristyle(halfWidth * 2, halfDepth * 2, TEMPLE_HEIGHT, 0.85, seed);
+  return compose([
+    {
+      ...building,
+      torches: [new THREE.Vector3(-halfWidth + 2.5, 0, halfDepth + 2.5), new THREE.Vector3(halfWidth - 2.5, 0, halfDepth + 2.5)],
+      at: new THREE.Vector3(0, 0, z),
+    },
+    { group: steppedRim(place.radius), obstacles: [], torches: [] },
+  ]);
+}
+
+/**
+ * Arquitectura monumental de cada lugar (espacio local, entrada en +Z hacia el ágora): el ágora es un tholos con
+ * techo abierto; los santuarios de los agentes, un templo con su monumento delante; los edificios menores, tholos
+ * de columnas.
+ */
+function architecture(place: Place, props: PlaceProps): Monument {
   const r = place.radius;
   const seed = seedOf(place.id);
   const rand = rng(seed);
-  const statueKind = (['head', 'torso', 'hand'] as const)[Math.floor(rand() * 3)]!;
   const aside = (angle: number, dist: number) => new THREE.Vector3(Math.sin(angle) * dist, 0, Math.cos(angle) * dist);
   if (place.kind === 'agora') {
     const ring = colonnadeRing(r - 4, 28, 22, 1.25, seed, 0.2);
@@ -386,16 +435,7 @@ function architecture(place: Place): Monument {
       { ...ring, group: new THREE.Group(), obstacles: [], torches: Array.from({ length: 4 }, (_, i) => aside((i / 4) * Math.PI * 2, r - 7)) },
     ]);
   }
-  if (place.kind === 'agent') {
-    const temple = peristyle(r * 0.9, r * 1.05, 15, 0.95, seed);
-    const statue = fallenStatue(statueKind, 4.5, seed + 1);
-    return compose([
-      temple,
-      { group: steppedRim(r), obstacles: [], torches: [] },
-      { group: statue, obstacles: [{ x: 0, z: 0, r: 7 }], torches: [], at: aside(Math.PI * (0.55 + rand() * 0.9), r * 0.8) },
-      { ...altar(1.4), at: aside(0, r * 0.38) },
-    ]);
-  }
+  if (place.kind === 'agent') return sanctuary(place, props.temple, seed);
   if (place.kind === 'foreign') {
     return compose([
       { group: new THREE.Group().add(drum(1, 6, rand)), obstacles: [{ x: 0, z: 0, r: 3 }], torches: [], at: aside(Math.PI * 0.8, r * 0.6) },
@@ -410,18 +450,22 @@ function architecture(place: Place): Monument {
   ]);
 }
 
-/** Construye el lugar: monumento (ampliado a escala monumental), arquitectura e isla, orientado hacia el ágora. */
-export function buildPlace(place: Place): BuiltPlace {
-  const base = place.landmark === 'agora' ? agora(place) : BUILDERS[place.landmark](place);
+/**
+ * Construye el lugar: monumento, arquitectura e isla, orientado hacia el ágora. El monumento, modelado a escala
+ * humana, crece con la ciudad; en un santuario de agente se queda a escala de altar, delante del templo.
+ */
+export function buildPlace(place: Place, props: PlaceProps = {}): BuiltPlace {
+  const base = place.landmark === 'agora' ? agora(place, props.serpent) : BUILDERS[place.landmark](place);
   if (place.landmark !== 'agora') {
-    // El monumento de cada lugar, modelado a escala humana, crece con la ciudad.
+    const agent = place.kind === 'agent';
     const scaled = new THREE.Group();
-    scaled.scale.setScalar(WORLD_SCALE);
+    scaled.scale.setScalar(agent ? EMBLEM_SCALE : WORLD_SCALE);
+    if (agent) scaled.position.z = SANCTUARY.emblem.z;
     for (const child of [...base.group.children]) scaled.add(child);
     base.group.add(scaled);
-    base.labelHeight = Math.min(base.labelHeight * WORLD_SCALE, 20);
+    base.labelHeight = agent ? TEMPLE_HEIGHT + 5 : Math.min(base.labelHeight * WORLD_SCALE, 20);
   }
-  const arch = architecture(place);
+  const arch = architecture(place, props);
   base.group.add(arch.group, buildIsland(place));
   base.group.position.set(place.x, 0, place.z);
   if (place.kind !== 'agora') base.group.rotation.y = Math.atan2(-place.x, -place.z);

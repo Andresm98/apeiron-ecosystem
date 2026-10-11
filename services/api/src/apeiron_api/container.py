@@ -15,11 +15,13 @@ from apeiron_api.a2a.tasks import A2ATaskStore
 from apeiron_api.settings import RemoteAgentConfig, Settings
 from apeiron_core.application.agents.factories import RemoteAgentFactory, SpecAgentFactory
 from apeiron_core.application.agents.registry import AgentRegistry
+from apeiron_core.application.conversations import InMemoryConversations
 from apeiron_core.application.guardrails import RuleGuardrails
 from apeiron_core.application.metrics import RuntimeMetrics
 from apeiron_core.application.orchestration.control import HUMAN, MAX_PARTICIPANTS
 from apeiron_core.application.orchestration.graph import build_graph
 from apeiron_core.application.ports.inbound.chat import ChatUseCasePort
+from apeiron_core.application.ports.outbound.conversations import ConversationPort
 from apeiron_core.application.ports.outbound.llm import LLMPort
 from apeiron_core.application.ports.outbound.memory import VectorStorePort
 from apeiron_core.application.ports.outbound.runs import RunRepositoryPort
@@ -293,6 +295,8 @@ async def build_container(s: Settings) -> Container:
     graph = build_apeiron_graph(s, tools, llm_breaker=breakers["llm"], remotes=remotes)
     simulation = graph if s.llm_provider == "fake" and not remotes else build_apeiron_graph(s, tools, True)
     runs = _build_runs(s, http)
+    # Conversaciones de la consola (ADR-014): durables en Supabase si hay historial; si no, en memoria del proceso.
+    conversations: ConversationPort = runs if isinstance(runs, SupabaseRunRepository) else InMemoryConversations()
     metrics = RuntimeMetrics()
     facade = ApeironFacade(
         graph,
@@ -301,6 +305,7 @@ async def build_container(s: Settings) -> Container:
         runs=runs,
         model_label=f"{s.llm_provider}:{s.llm_model}",
         metrics=metrics,
+        conversations=conversations,
     )
     # Sesiones: grafos con checkpointer y participante humano. Con APEIRON_SESSIONS_DB_PATH, diario y checkpoints
     # en SQLite (sobreviven a un reinicio); sin él, en memoria y por instancia.

@@ -174,3 +174,8 @@ text {
   stroke: var(--moss-dark);
   stroke-dasharray: 4 3;
 }
+
+/* En el inspector de la consola el lienzo usa todo el ancho del popover. */
+:host(.wide) .graph {
+  max-width: none;
+}

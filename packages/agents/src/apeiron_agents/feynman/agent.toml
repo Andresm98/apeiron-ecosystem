@@ -23,8 +23,9 @@ subtitle = "Modelos causales y experimentos"
 landmark = "workshop"
 color = "#3f8fc4"
 epithet = "Si no puede explicarse con sencillez, no se entiende"
+figure = "philosopher"
 
 [simulation]
-query = "mecanismo causal experimento hipótesis"
+query = "Feynman mecanismo causal experimento hipótesis"
 thesis = "solo se entiende si se explica su mecanismo paso a paso y se propone un experimento que pueda refutarla"
 objection = "no dice qué observación la haría falsa; sin una prueba posible no explica nada"

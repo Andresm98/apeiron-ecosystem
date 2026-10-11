@@ -58,6 +58,7 @@ class WorkerState(TypedDict, total=False):
     question: str
     history: list[AgentTurn]
     round: int
+    context: str  # conversación previa con el usuario (ADR-014); va tras la pregunta
     scratch: str
     step: int
     action_tool: str
@@ -142,7 +143,9 @@ class ReActAgent:
     async def _reason(self, state: WorkerState) -> dict[str, Any]:
         step = state.get("step", 0)
         scratch = state.get("scratch", "")
-        prompt = state["question"] + dialogue_block(self.name, state.get("history", []))
+        context = state.get("context", "")
+        prompt = state["question"] + (f"\n\n{context}" if context else "")
+        prompt += dialogue_block(self.name, state.get("history", []))
         if scratch:
             prompt += f"\n\n{scratch}"
         force = step >= self._max_steps - 1  # cota dura: nunca más pasos que max_steps

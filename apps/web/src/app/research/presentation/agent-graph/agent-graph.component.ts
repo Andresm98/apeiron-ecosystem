@@ -3,7 +3,8 @@ import { END, GraphRun, NodeStatus, START, edgeVisited, isLastEdge } from '../..
 import { AgentDirectory } from '../../application/agent-directory';
 import { AgentInfo } from '../../domain/topology';
 
-const W = 320;
+const MIN_W = 320;
+const WORKER_W = 124; // ancho mínimo legible de una caja de worker (nombre + «worker · ReAct»)
 const MARGIN = 14;
 const GAP = 12;
 const ROUTER_Y = 46;
@@ -31,14 +32,21 @@ interface WorkerBox {
   selector: 'app-agent-graph',
   templateUrl: './agent-graph.component.html',
   styleUrl: './agent-graph.component.scss',
+  host: { '[class.wide]': 'wide()' },
 })
 export class AgentGraphComponent {
   readonly run = input.required<GraphRun>();
   readonly agents = input<AgentInfo[] | undefined>();
+  /** Sin tope de ancho (p. ej. en el inspector de la consola): el SVG crece con el número de workers. */
+  readonly wide = input(false);
 
-  readonly W = W;
+  /** Con muchos workers el lienzo se ensancha en lugar de estrechar las cajas hasta solapar sus rótulos. */
+  readonly W = computed(() => {
+    const n = this.agents()?.length ?? 0;
+    return Math.max(MIN_W, MARGIN * 2 + n * WORKER_W + GAP * Math.max(n - 1, 0));
+  });
   readonly H = END_Y + 18;
-  readonly cx = W / 2;
+  readonly cx = computed(() => this.W() / 2);
   readonly y = { router: ROUTER_Y, worker: WORKER_Y, workerH: WORKER_H, supervisor: SUPERVISOR_Y, synthesis: SYNTHESIS_Y, end: END_Y, box: BOX_H };
   readonly START = START;
   readonly END = END;
@@ -46,7 +54,7 @@ export class AgentGraphComponent {
   readonly workers = computed<WorkerBox[]>(() => {
     const agents = this.agents() ?? [];
     const n = agents.length;
-    const w = (W - MARGIN * 2 - GAP * (n - 1)) / n;
+    const w = (this.W() - MARGIN * 2 - GAP * (n - 1)) / n;
     return agents.map((a, i) => {
       const x = MARGIN + i * (w + GAP);
       return { name: a.name, role: a.role, x, w, cx: x + w / 2, hasTools: a.tools.length > 0, remote: a.kind === 'remote', compact: w < 120 };

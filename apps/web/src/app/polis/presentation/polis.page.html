@@ -105,7 +105,7 @@
     }
 
     @if (onboarding()) {
-      <app-polis-onboarding class="polis-onboarding" [player]="playerName()" [coarse]="coarse()" (done)="finishOnboarding()" />
+      <app-polis-onboarding class="polis-onboarding" [player]="playerName()" [coarse]="coarse()" [figures]="figures()" [figure]="figure()" (choose)="chooseFigure($event)" (done)="finishOnboarding()" />
     }
   }
 

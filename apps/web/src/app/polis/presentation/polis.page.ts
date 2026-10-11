@@ -11,6 +11,7 @@ import { BRIDGE_WIDTH, HOME_ID, Place, toolPlaceId } from '../domain/city-layout
 import { HUD_TOKENS, PerfSample, QUALITY_LABEL, QUALITY_LEVELS, Quality, initialQuality, isQuality, overBudget } from '../domain/atmosphere';
 import { CitizenState, CoreState } from '../domain/citizen-state';
 import { DeliberationDraft, HUMAN, MAX_PARTICIPANTS, estimateCalls, reasonLabel, secondsLeft } from '../domain/deliberation';
+import { DEFAULT_PLAYER_FIGURE, FigureInfo } from '../domain/figure-catalog';
 import { ONBOARDING_KEY, Whereabouts, chronicle, countdown, linkLabel, progressLine, roster } from '../domain/hud';
 import { EMPTY_CURSOR, SignalCursor, readSignals } from '../domain/signals';
 import type { PolisWorld } from './engine/world';
@@ -63,6 +64,8 @@ function readValue(key: string): string | null {
 }
 
 const QUALITY_KEY = 'apeiron-polis-quality';
+/** Aspecto elegido para ssanax (una figura animada del catálogo); se recuerda en este navegador. */
+const FIGURE_KEY = 'apeiron-polis-figure';
 const params = () => new URLSearchParams(window.location.search);
 
 /**
@@ -103,6 +106,9 @@ export class PolisPage implements OnInit {
   /** Nivel forzado por la URL (`?quality=low`, lo usa CI) o elegido antes en ajustes: el regulador no lo toca. */
   private readonly forcedQuality = params().get('quality');
   private readonly chosenQuality = readValue(QUALITY_KEY);
+  /** Aspectos que puede llevar ssanax y el elegido (`null` = el de por defecto). */
+  readonly figures = signal<FigureInfo[]>([]);
+  readonly figure = signal<string | null>(readValue(FIGURE_KEY));
   readonly quality = signal<Quality>(initialQuality({
     coarse: window.matchMedia?.('(pointer: coarse)').matches ?? false,
     forced: this.forcedQuality,
@@ -267,6 +273,11 @@ export class PolisPage implements OnInit {
       autoQuality: !isQuality(this.forcedQuality) && !isQuality(this.chosenQuality),
       perf: this.perfEnabled,
       reducedMotion: reduced,
+      figure: this.figure(),
+    });
+    void this.world.playerFigures().then((figures) => {
+      this.figures.set(figures);
+      if (!figures.some((f) => f.id === this.figure())) this.figure.set(figures.find((f) => f.id === DEFAULT_PLAYER_FIGURE)?.id ?? figures[0]?.id ?? null);
     });
     this.world.setFocusLock(this.sessionOpen() || this.polis.running() || !!this.polis.selected());
     this.world.setCity(this.polis.places(), (agent) => this.who(agent));
@@ -328,6 +339,13 @@ export class PolisPage implements OnInit {
   travel(place: Place): void {
     this.world?.travel(place.id);
     this.mapOpen.set(false);
+  }
+
+  /** Cambia el aspecto de ssanax (selector de la bienvenida) y lo recuerda. */
+  chooseFigure(id: string): void {
+    this.figure.set(id);
+    writeFlag(FIGURE_KEY, id);
+    this.world?.setPlayerFigure(id);
   }
 
   setQuality(quality: Quality): void {

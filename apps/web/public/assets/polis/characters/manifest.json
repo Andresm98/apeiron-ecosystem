@@ -1,4 +1,8 @@
 {
-  "version": 1,
-  "characters": []
+  "version": 2,
+  "characters": [
+    { "id": "ssanax", "kind": "rigged", "title": "Guerrero de cristal" },
+    { "id": "ssanax2", "kind": "rigged", "title": "Señor oscuro" },
+    { "id": "philosopher", "kind": "statue", "title": "Estatua de mármol" }
+  ]
 }

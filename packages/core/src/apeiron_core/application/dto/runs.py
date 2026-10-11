@@ -26,6 +26,7 @@ class AgentRun(TypedDict):
     trace_id: str
     channel: str  # web | a2a | session (deliberación de la Polis, ADR-013)
     a2a_task_id: str | None
+    conversation_id: str | None  # hilo de la consola al que pertenece (ADR-014); None fuera de la consola
     question: str
     mode: str
     simulate: bool

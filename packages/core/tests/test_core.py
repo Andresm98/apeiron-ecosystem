@@ -2,6 +2,7 @@ from collections.abc import Mapping
 
 import pytest
 
+from apeiron_core.application.agents.base import dialogue_block, interlocutor
 from apeiron_core.application.agents.factories import SpecAgentFactory
 from apeiron_core.application.agents.react import ReActAgent
 from apeiron_core.application.agents.registry import AgentRegistry
@@ -9,6 +10,7 @@ from apeiron_core.application.orchestration.graph import build_graph
 from apeiron_core.application.ports.outbound.tools import ToolPort
 from apeiron_core.application.use_cases.chat import ApeironFacade
 from apeiron_core.domain.entities.agent_spec import AgentCardInfo, AgentSpec, Residence
+from apeiron_core.domain.entities.agent_turn import AgentTurn
 from apeiron_core.domain.services.routing import decide_agent, decide_mode
 
 
@@ -299,6 +301,25 @@ async def test_debate_workers_reply_to_each_other_in_turns():
     assert "heraclito (ronda 1): posición 2" in llm.calls[2][1]
     assert "[Ápeiron Delegating → heraclito r0]" in out["trace"]
     assert out["trace"][-1] == "[Synthesis]" and len(llm.calls) == 5
+
+
+def test_dialogue_block_puts_the_latest_speaker_as_interlocutor():
+    """Con varios en la mesa, el interlocutor es el último que habló (el `responds_to`), no el primero."""
+
+    def turn(agent: str, rnd: int, degraded: bool = False) -> AgentTurn:
+        return {"agent": agent, "round": rnd, "text": f"{agent}-{rnd}", "degraded": degraded, "responds_to": None}
+
+    history = [turn("anaximandro", 0), turn("heraclito", 0), turn("epicuro", 0), turn("anaximandro", 1),
+               turn("human", 1), turn("feynman", 1, degraded=True)]
+    block = dialogue_block("heraclito", history)
+    head, context = block.split("Antes hablaron en la mesa")
+
+    assert interlocutor("heraclito", history) == "human"
+    assert head.endswith("Tu interlocutor acaba de sostener:\n- human (ronda 2): human-1\n")
+    # El resto, del más reciente al más antiguo; ni el propio agente ni los turnos degradados.
+    assert context.index("anaximandro (ronda 2)") < context.index("epicuro (ronda 1)")
+    assert "anaximandro-0" not in block and "heraclito" not in block and "feynman" not in block
+    assert dialogue_block("heraclito", []) == ""
 
 
 async def test_facade_stream_reports_inner_nodes_and_usage():

@@ -4,7 +4,11 @@
     @if (remote()) { <span class="remote-badge" title="Agente remoto vía protocolo A2A">A2A</span> }
   </span>
   <span class="meta">
-    RONDA {{ turn().round + 1 }} · {{ turn().responds_to ? 'RESPONDE A ' + agentLabel(turn().responds_to!).toUpperCase() : 'ABRE EL DEBATE' }}
+    @if (single()) {
+      CONSULTA
+    } @else {
+      RONDA {{ turn().round + 1 }} · {{ turn().responds_to ? 'RESPONDE A ' + agentLabel(turn().responds_to!).toUpperCase() : 'ABRE EL DEBATE' }}
+    }
   </span>
 </div>
 
@@ -15,10 +19,10 @@
   </blockquote>
 }
 
-<p class="text">{{ turn().text }}</p>
+<app-markdown class="text" [text]="turn().text" />
 
 @if (evidence().length) {
-  <details class="evidence" open>
+  <details class="evidence">
     <summary>Razonamiento observable · {{ evidence().length }} {{ evidence().length === 1 ? 'herramienta' : 'herramientas' }}</summary>
     <ol>
       @for (s of evidence(); track s.step) {

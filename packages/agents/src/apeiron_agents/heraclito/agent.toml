@@ -24,8 +24,9 @@ subtitle = "Cambio, contradicción y logos"
 landmark = "fire"
 color = "#e0663a"
 epithet = "Nadie se baña dos veces en el mismo río"
+figure = "philosopher"
 
 [simulation]
 query = "Heráclito todo fluye logos tensión de opuestos"
 thesis = "se explica desde el devenir: todo fluye y lo real es la tensión de opuestos medida por el logos, no una reserva inmóvil"
-objection = "un fondo indeterminado no explica nada; la unidad está en la lucha misma de los contrarios, como en el arco y la lira"
+objection = "lo trata como algo fijo, y mientras lo decimos ya está cambiando; la unidad está en la lucha misma de los contrarios, como en el arco y la lira"

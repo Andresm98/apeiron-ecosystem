@@ -1,0 +1,95 @@
+<button
+  type="button"
+  class="inspector-chip"
+  [class.chip-running]="state.status() === 'running'"
+  [class.chip-pinned]="pinned()"
+  [attr.aria-expanded]="open()"
+  aria-controls="run-inspector-panel"
+  aria-haspopup="dialog"
+  (click)="toggle()"
+>
+  <span class="status-dot" [class.status-dot-muted]="state.status() !== 'running'" aria-hidden="true"></span>
+  <span class="chip-title">Grafo en vivo</span>
+  <span class="chip-state">{{ state.status() === 'running' && activeNode() ? activeNode() : statusLabel() }}</span>
+  @if (state.usage(); as usage) {
+    <span class="chip-meta">{{ usage.calls }} llamadas · {{ usage.total_tokens }} tokens</span>
+  }
+</button>
+
+@if (open()) {
+  <section id="run-inspector-panel" class="inspector-panel" role="dialog" aria-label="Runtime LangGraph de la ejecución">
+    <header class="panel-head">
+      <div>
+        <p class="eyebrow">RUNTIME LANGGRAPH</p>
+        <h3>Grafo en vivo</h3>
+        <p class="panel-description">Cada nodo se ilumina al ejecutarse; las líneas discontinuas son decisiones de Ápeiron.</p>
+      </div>
+      <button type="button" class="pin-button" [attr.aria-pressed]="pinned()" (click)="toggle()" [attr.title]="pinned() ? 'Desfijar' : 'Fijar abierto'">
+        {{ pinned() ? 'Fijado ✕' : 'Fijar' }}
+      </button>
+    </header>
+
+    <div class="panel-body">
+      <div class="graph-column">
+        <app-agent-graph [run]="state.graph()" [agents]="state.topology()?.agents" [wide]="true" />
+        @if (state.openedRunId() && state.status() !== 'running') {
+          <p class="usage-note">Ejecución reabierta del historial: el grafo en vivo solo se dibuja mientras corre.</p>
+        }
+      </div>
+
+      <div class="side-column">
+        <dl class="usage" aria-label="Consumo de la última ejecución">
+          <div><dt>Llamadas LLM</dt><dd>{{ state.usage()?.calls ?? '—' }}</dd></div>
+          <div><dt>Tokens</dt><dd>{{ state.usage() ? state.usage()!.total_tokens : '—' }}</dd></div>
+          <div><dt>Tiempo</dt><dd>{{ state.elapsedMs() ? (state.elapsedMs() / 1000).toFixed(1) + ' s' : '—' }}</dd></div>
+        </dl>
+        @if (state.usage(); as usage) {
+          <p class="usage-note">
+            @if (state.simulated()) {
+              Simulación: LLM determinista, recorrido completo sin coste.
+            } @else {
+              {{ usage.input_tokens }} entrada · {{ usage.output_tokens }} salida · {{ model() }}
+            }
+          </p>
+        }
+
+        @if (state.openedAgents().length) {
+          <p class="usage-note">
+            Agentes ejecutados:
+            @for (a of state.openedAgents(); track a.agent_id) {
+              <br />· {{ agentLabel(a.agent_id) }}: {{ a.invocations }}× · {{ a.reasoning_steps }} pasos · {{ a.tool_calls }} tools{{ a.tools_used.length ? ' (' + a.tools_used.join(', ') + ')' : '' }}{{ a.degraded ? ' · degradado' : '' }}
+            }
+          </p>
+        }
+
+        @if (state.status() !== 'idle' || state.guards().length) {
+          <section class="guard-panel" aria-label="Guardrails de la ejecución">
+            <p class="guard-title">Guardrails · {{ state.guards().length }} {{ state.guards().length === 1 ? 'intervención' : 'intervenciones' }}</p>
+            @for (g of state.guards(); track $index) {
+              <p class="guard-item" [class.guard-block]="g.action === 'block'">
+                <span aria-hidden="true">{{ g.action === 'block' ? '⊘' : '✎' }}</span>
+                <strong>{{ g.agent === 'apeiron' ? 'Ápeiron' : agentLabel(g.agent) }}</strong> · {{ describeGuard(g) }}
+              </p>
+            } @empty {
+              <p class="guard-item guard-none">Sin intervenciones: entrada, evidencia y citas pasaron los controles.</p>
+            }
+          </section>
+        }
+
+        <details class="trace-details" [open]="state.trace().length > 0 && state.trace().length < 14">
+          <summary>Traza de eventos ({{ state.trace().length }})</summary>
+          <ol class="trace-list">
+            @for (step of state.trace(); track $index) {
+              <li>
+                <span class="trace-index">{{ $index + 1 }}</span>
+                <span>{{ step.replaceAll('[', '').replaceAll(']', '') }}</span>
+              </li>
+            } @empty {
+              <li class="trace-empty">La ruta aparecerá aquí al iniciar una consulta.</li>
+            }
+          </ol>
+        </details>
+      </div>
+    </div>
+  </section>
+}

@@ -19,6 +19,13 @@ PRESOCRATIC_SEED = [
     "Anaximandro imaginó la Tierra suspendida sin soporte, en equilibrio por su equidistancia, y mundos innumerables que nacen y perecen en el ápeiron.",
     "Heráclito sostuvo que todo fluye (panta rhei) y que la realidad es tensión de opuestos regida por el logos; el fuego simboliza el cambio perpetuo.",
     "Heráclito: la armonía surge de la tensión entre contrarios, como en el arco y la lira; la guerra (pólemos) es común y la discordia, justicia.",
+    # Un fondo propio por ciudadano (ADR-013): sin él, su consulta recupera la evidencia de otro y la cita como suya.
+    "Nietzsche propuso la genealogía de los valores: preguntar de dónde viene cada valor, qué supuestos ocultos lo sostienen y a quién sirve; la moral tiene una historia.",
+    "Nietzsche: detrás de lo que se presenta como verdad o bien universal suele haber una voluntad de poder; el resentimiento invierte los valores de los fuertes.",
+    "Feynman: una hipótesis se pone a prueba con un experimento; si el resultado la contradice, es falsa, por elegante que sea o por famoso que sea quien la propone.",
+    "Feynman insistía en explicar el mecanismo causal paso a paso y con sencillez: lo primero es no engañarse a uno mismo, y uno mismo es el más fácil de engañar.",
+    "Epicuro: la prudencia (phrónesis) juzga cada elección por sus consecuencias; buscar placeres que traen más sufrimiento que tranquilidad es un mal cálculo.",
+    "Epicuro distinguió deseos naturales y necesarios de los vanos: lo suficiente basta, y la ataraxia nace de vivir sin dolor del cuerpo ni turbación del alma.",
     "El problema de los tres cuerpos carece de solución general cerrada; el movimiento puede ser caótico, con sensibilidad extrema a las condiciones iniciales.",
     "El entrelazamiento cuántico produce correlaciones no clásicas entre subsistemas; los tests de Bell excluyen variables ocultas locales.",
     "La paradoja de Fermi contrasta la alta probabilidad estimada de civilizaciones con la ausencia de evidencia observacional de ellas.",

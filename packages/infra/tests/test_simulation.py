@@ -80,9 +80,35 @@ async def test_five_citizens_debate_with_distinct_perspectives_in_simulation():
     assert "genealogía" in texts["nietzsche"]  # crítica de valores
     assert "experimento" in texts["feynman"]  # verificación
     assert "consecuencias" in texts["epicuro"]  # prudencia
-    assert all("Respondo a" in texts[name] for name in roster[1:])  # todos replican a una posición previa
     assert [t["responds_to"] for t in out["turns"]] == [None, *roster[:-1]]  # interlocutor real: el anterior
+    for previous, name in zip(roster, roster[1:], strict=False):
+        # El texto replica al mismo interlocutor que registra `responds_to`, no al primero que habló.
+        assert texts[name].count("Respondo a") == 1
+        assert f"Respondo a {CATALOG[previous].display_name}:" in texts[name]
+    for name in roster:
+        # Cada ciudadano cita su propio fondo de la memoria, no el de otro.
+        evidence = texts[name].split("Evidencia recuperada")[1].split("Respondo a")[0]
+        assert CATALOG[name].display_name in evidence
     assert "5 perspectivas distintas" in out["answer"]
+
+
+async def test_second_round_replies_to_the_latest_speaker_not_the_first():
+    """En la ronda 2, Anaximandro replica a quien acaba de hablar (Epicuro), sin atribuirle tesis de otro."""
+    store = InMemoryVectorStore()
+    await seed_global(store)
+    tools = {"vector_memory_retriever": VectorMemoryRetriever(store)}
+    registry = AgentRegistry()
+    roster = ["anaximandro", "heraclito", "epicuro"]
+    register(registry, *roster)
+    llm = fake_llm()
+    graph = build_graph(registry.build_all(llm, tools, max_steps=2), llm, debate_participants=roster)
+
+    out = await graph.ainvoke({"question": "Debate: ¿qué es la justicia?", "mode": "debate", "max_rounds": 2})
+    anaximandro_r1 = next(t for t in out["turns"] if t["agent"] == "anaximandro" and t["round"] == 1)
+
+    assert anaximandro_r1["responds_to"] == "epicuro"
+    assert "Respondo a Epicuro:" in anaximandro_r1["text"]
+    assert "flujo" not in anaximandro_r1["text"]  # su objeción no presupone la tesis de Heráclito
 
 
 def test_catalog_declares_the_five_citizens_with_their_access():

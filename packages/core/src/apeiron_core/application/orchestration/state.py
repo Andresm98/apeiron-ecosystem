@@ -17,6 +17,7 @@ class ApeironInput(TypedDict, total=False):
     agent: str  # interlocutor elegido por el usuario: fuerza el modo `single` (ADR-013)
     participants: list[str]  # convocados por el usuario (incluido `human`): fuerza el modo `debate`
     open_ended: bool  # sin rondas fijas: cierra el usuario, el tiempo o un tope duro
+    context: str  # intercambios previos de la conversación (ADR-014); lo compone la facade, nunca el cliente
 
 
 class ApeironState(ApeironInput, total=False):

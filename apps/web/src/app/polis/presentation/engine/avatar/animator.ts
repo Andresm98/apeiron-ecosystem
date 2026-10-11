@@ -9,6 +9,9 @@ export const RUN_SPEED = 8;
 /** Distancia de un ciclo completo (dos pasos): la fase avanza con la distancia, así los pies no patinan. */
 const WALK_CYCLE = LEG_LENGTH * 2.4;
 const RUN_CYCLE = LEG_LENGTH * 4;
+
+/** Metros por ciclo de caminar y de correr. Un avatar glTF trae los de sus clips (`GltfAvatar.stride`). */
+export interface Stride { walk: number; run: number; }
 const FADE_S = 0.22;
 const LAND_S = 0.32;
 /** Segundos quieto antes de un idle variado (mirar alrededor, estirarse). */
@@ -37,6 +40,8 @@ export interface ClipWeights {
   jump: number;
   /** Fase del ciclo de caminar/correr ∈ [0, 1). */
   phase: number;
+  /** Progreso del vuelo ∈ [0, 1]: 0 al despegar, 0,5 en lo más alto, 1 al tocar suelo (0 en tierra). */
+  air: number;
   gesture: { name: Gesture; weight: number; progress: number } | null;
 }
 
@@ -58,8 +63,20 @@ export class Animator {
   private impact = 0;
   private wasGrounded = true;
   private airVy = 0;
+  private takeoffVy = 0;
   private active: Active | null = null;
   private variant = 0;
+  private stride: Stride = { walk: WALK_CYCLE, run: RUN_CYCLE };
+
+  /** Zancada del avatar en uso: con la de sus clips, sus pies no patinan. */
+  setStride(stride: Stride): void {
+    if (stride.walk > 0 && stride.run > 0) this.stride = stride;
+  }
+
+  /** Vuelve a la zancada del rig procedural (una figura sin zancada declarada). */
+  resetStride(): void {
+    this.stride = { walk: WALK_CYCLE, run: RUN_CYCLE };
+  }
 
   /** Pide un gesto de una vez; sustituye al que esté en curso. */
   play(name: Gesture): void {
@@ -79,7 +96,7 @@ export class Animator {
 
     // Locomoción: la fase avanza con la distancia recorrida.
     const k = clamp01((input.speed - WALK_SPEED) / (RUN_SPEED - WALK_SPEED));
-    const cycle = WALK_CYCLE + (RUN_CYCLE - WALK_CYCLE) * k;
+    const cycle = this.stride.walk + (this.stride.run - this.stride.walk) * k;
     const before = this.phase;
     if (input.grounded && input.speed > 0.05) this.phase = (this.phase + (input.speed * dt) / cycle) % 1;
     if (input.grounded && input.speed > 0.6) {
@@ -91,6 +108,7 @@ export class Animator {
     let base = blend(idle(this.time), stride(this.phase, k), moving);
 
     // Salto y aterrizaje.
+    if (!input.grounded && this.wasGrounded) this.takeoffVy = input.vy;
     if (!input.grounded) this.airVy = Math.min(this.airVy, input.vy);
     if (input.grounded && !this.wasGrounded) {
       this.impact = clamp01(-this.airVy / 9);
@@ -144,6 +162,7 @@ export class Animator {
         run: jump ? 0 : moving * k,
         jump,
         phase: this.phase,
+        air: input.grounded ? 0 : airProgress(this.takeoffVy, input.vy),
         gesture: gestureWeights,
       },
       events,
@@ -153,6 +172,15 @@ export class Animator {
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
+}
+
+/**
+ * Progreso de un vuelo balístico por la velocidad vertical: de +v0 (despegue) a −v0 (aterrizaje). Sin impulso
+ * (caer de un borde) se queda en la mitad descendente.
+ */
+function airProgress(takeoffVy: number, vy: number): number {
+  if (takeoffVy <= 0.5) return clamp01(0.5 - vy / 18);
+  return clamp01((takeoffVy - vy) / (2 * takeoffVy));
 }
 
 /** ¿La fase pasó por `mark` al ir de `from` a `to` (con vuelta en 1)? */

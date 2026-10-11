@@ -29,9 +29,17 @@ async def agents(
 
 
 def _check_agent(body: ChatRequest, c: Container) -> None:
-    """El interlocutor debe existir en la topología publicada (incluye los remotos A2A)."""
-    if body.agent is not None and body.agent not in {a["name"] for a in c.topology["agents"]}:
+    """El interlocutor y la mesa deben existir en la topología publicada (incluye los remotos A2A)."""
+    known = {a["name"] for a in c.topology["agents"]}
+    if body.agent is not None and body.agent not in known:
         raise HTTPException(status_code=422, detail=f"agente desconocido: {body.agent}")
+    unknown = [name for name in body.participants or [] if name not in known]
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"participantes desconocidos: {', '.join(unknown)}")
+
+
+def _conversation(body: ChatRequest) -> str | None:
+    return str(body.conversation_id) if body.conversation_id else None
 
 
 @router.post("/chat")
@@ -41,7 +49,15 @@ async def chat(
     c: Annotated[Container, Depends(get_container)],
 ) -> ChatResponse:
     _check_agent(body, c)
-    out = await c.facade.ask(body.question, body.mode, body.max_rounds, body.simulate, body.agent)
+    out = await c.facade.ask(
+        body.question,
+        body.mode,
+        body.max_rounds,
+        body.simulate,
+        body.agent,
+        participants=body.participants,
+        conversation_id=_conversation(body),
+    )
     return ChatResponse(
         answer=out["answer"],
         mode=out["mode"],
@@ -64,7 +80,13 @@ async def chat_stream(
         request_ctx.set(ctx)
         try:
             async for ev in c.facade.stream(
-                body.question, body.mode, body.max_rounds, body.simulate, body.agent
+                body.question,
+                body.mode,
+                body.max_rounds,
+                body.simulate,
+                body.agent,
+                participants=body.participants,
+                conversation_id=_conversation(body),
             ):
                 yield sse(ev.type, ev.data)
         except Exception:

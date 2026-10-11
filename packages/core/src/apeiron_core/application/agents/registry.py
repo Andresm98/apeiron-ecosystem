@@ -56,6 +56,7 @@ class AgentRegistry:
                         "landmark": residence.landmark,
                         "color": residence.color,
                         "epithet": residence.epithet,
+                        "figure": residence.figure,
                     },
                 }
             described.append(item)

@@ -22,59 +22,52 @@
   </header>
 
   <div class="workspace-grid">
-    <aside class="case-panel" aria-labelledby="cases-title">
-      <div class="panel-heading">
-        <p class="eyebrow">01 / EXPLORACIONES</p>
-        <h2 id="cases-title">{{ leftTab() === 'cases' ? 'Casos de estudio' : 'Tu historial' }}</h2>
-        <p class="panel-description">
-          {{ leftTab() === 'cases' ? 'Una pregunta puede abrir más de una vía.' : 'Ejecuciones guardadas en Supabase.' }}
-        </p>
-        @if (historyEnabled()) {
-          <div class="left-tabs" role="tablist" aria-label="Panel izquierdo">
-            <button type="button" role="tab" [attr.aria-selected]="leftTab() === 'cases'" [class.left-tab-active]="leftTab() === 'cases'" (click)="leftTab.set('cases')">Casos</button>
-            <button type="button" role="tab" [attr.aria-selected]="leftTab() === 'history'" [class.left-tab-active]="leftTab() === 'history'" (click)="showHistory()">Historial</button>
-          </div>
-        }
-      </div>
+    <aside class="sidebar" aria-label="Conversaciones y casos">
+      <button class="new-chat" type="button" (click)="newConversation()" [disabled]="state.status() === 'running'">
+        <span aria-hidden="true">＋</span> Nueva conversación
+      </button>
 
-      @if (leftTab() === 'history') {
-        <nav class="case-list" aria-label="Historial de ejecuciones">
-          @for (run of state.history(); track run.id) {
+      @if (historyEnabled()) {
+        <div class="left-tabs" role="tablist" aria-label="Panel lateral">
+          <button type="button" role="tab" [attr.aria-selected]="tab() === 'history'" [class.left-tab-active]="tab() === 'history'" (click)="showHistory()">Conversaciones</button>
+          <button type="button" role="tab" [attr.aria-selected]="tab() === 'cases'" [class.left-tab-active]="tab() === 'cases'" (click)="leftTab.set('cases')">Casos</button>
+        </div>
+      }
+
+      @if (tab() === 'history') {
+        <nav class="side-list" aria-label="Historial de conversaciones">
+          @for (c of state.conversations(); track c.id) {
             <button
-              class="case-choice"
+              class="side-item"
               type="button"
-              [class.case-choice-active]="state.openedRunId() === run.id"
-              [attr.aria-pressed]="state.openedRunId() === run.id"
-              (click)="openRun(run)"
+              [class.side-item-active]="isActive(c)"
+              [attr.aria-current]="isActive(c) ? 'true' : null"
+              [attr.title]="c.title"
+              (click)="openConversation(c)"
             >
-              <span class="case-number" [class.run-error]="run.status !== 'completed'" [attr.title]="runStatusLabel(run)">
-                {{ run.status === 'error' ? '!' : run.status === 'blocked' ? '⊘' : run.mode === 'debate' ? 'D' : 'C' }}
+              <span class="side-title">
+                @if (c.status === 'error') { <span class="run-flag run-error" title="Con error">!</span> }
+                @if (c.status === 'blocked') { <span class="run-flag run-error" title="Bloqueada por el guardrail de entrada">⊘</span> }
+                {{ c.title }}
               </span>
-              <span class="case-title">{{ run.question }}</span>
-              <span class="case-mode">
-                {{ runDate(run.created_at) }} · {{ run.simulate ? 'simulación' : (run.usage.total_tokens ?? 0) + ' tokens' }}{{ run.channel === 'a2a' ? ' · vía A2A' : '' }}{{ run.status === 'blocked' ? ' · bloqueada' : '' }}
+              <span class="side-meta">
+                {{ runDate(c.updated_at) }} · {{ c.exchanges }} {{ c.exchanges === 1 ? 'mensaje' : 'mensajes' }}
+                · {{ c.modes.includes('debate') ? 'debate' : 'consulta' }}{{ c.simulate ? ' · sim.' : '' }}{{ c.channel === 'a2a' ? ' · A2A' : c.channel === 'session' ? ' · Polis' : '' }}
               </span>
             </button>
           } @empty {
-            <p class="history-empty">{{ state.historyError() || 'Aún no hay ejecuciones. Lanza una consulta y aparecerá aquí.' }}</p>
+            <p class="history-empty">{{ state.historyError() || 'Aún no hay conversaciones. Pregunta algo y aparecerá aquí.' }}</p>
           }
         </nav>
       } @else {
-      <nav class="case-list" aria-label="Casos de uso">
-        @for (caseStudy of caseStudies; track caseStudy.id) {
-          <button
-            class="case-choice"
-            type="button"
-            [class.case-choice-active]="selectedCaseId() === caseStudy.id"
-            [attr.aria-pressed]="selectedCaseId() === caseStudy.id"
-            (click)="selectCase(caseStudy)"
-          >
-            <span class="case-number">{{ caseStudy.id < 10 ? '0' + caseStudy.id : caseStudy.id }}</span>
-            <span class="case-title">{{ caseStudy.title }}</span>
-            <span class="case-mode">{{ caseStudy.mode === 'debate' ? 'Debate' : 'Consulta' }}</span>
-          </button>
-        }
-      </nav>
+        <nav class="side-list" aria-label="Casos de estudio">
+          @for (caseStudy of caseStudies; track caseStudy.id) {
+            <button class="side-item" type="button" (click)="selectCase(caseStudy)">
+              <span class="side-title">{{ caseStudy.title }}</span>
+              <span class="side-meta">{{ caseStudy.mode === 'debate' ? 'Debate' : 'Consulta' }}</span>
+            </button>
+          }
+        </nav>
       }
 
       <p class="panel-footnote">Orquestador Ápeiron · workers {{ agentNames() }}</p>
@@ -82,183 +75,164 @@
 
     <main class="chat-panel" aria-labelledby="console-title">
       <header class="console-heading">
-        <div>
-          <p class="eyebrow">02 / CONSOLA DE INVESTIGACIÓN</p>
-          <h2 id="console-title">Pregunta al Ápeiron</h2>
+        <div class="console-title">
+          <p class="eyebrow">CONSOLA DE INVESTIGACIÓN</p>
+          <h2 id="console-title" [attr.title]="threadTitle()">{{ threadTitle() }}</h2>
         </div>
-        <div class="mode-switch" role="group" aria-label="Modo de respuesta">
-          <button type="button" [class.mode-active]="mode === 'single'" (click)="mode = 'single'">Consulta</button>
-          <button type="button" [class.mode-active]="mode === 'debate'" (click)="mode = 'debate'">Debate</button>
-        </div>
+        <app-run-inspector />
       </header>
 
-      <section class="conversation" aria-live="polite" aria-label="Conversación">
-        @if (submittedQuestion()) {
+      <section #scroller class="conversation" aria-live="polite" aria-label="Conversación">
+        @for (ex of state.thread(); track $index; let last = $last) {
           <article class="question-turn">
-            <p class="turn-label">TU PREGUNTA</p>
-            <p>{{ submittedQuestion() }}</p>
+            <p class="turn-label">TÚ · {{ ex.mode === 'debate' ? 'DEBATE' : 'CONSULTA' }}</p>
+            <p>{{ ex.question }}</p>
           </article>
-        } @else {
+
+          @if (!last && ex.mode === 'debate' && ex.run.turns.length > 1) {
+            <details class="past-debate">
+              <summary>Ver el debate · {{ ex.run.turns.length }} turnos de {{ speakers(ex.run.turns) }}</summary>
+              <ng-container *ngTemplateOutlet="turnsTpl; context: { $implicit: ex }" />
+            </details>
+          } @else {
+            <ng-container *ngTemplateOutlet="turnsTpl; context: { $implicit: ex }" />
+          }
+
+          @if (last) {
+            @for (s of liveSteps(); track $index) {
+              <p class="working-state">
+                <span class="status-dot"></span>
+                <span><strong>{{ agentLabel(s.agent) }}</strong> consultó {{ s.tool }} → «{{ excerpt(s.observation, 140) }}»</span>
+              </p>
+            }
+            @if (ex.run.status === 'running') {
+              <p class="working-state"><span class="status-dot"></span>Ápeiron está coordinando a los workers…</p>
+            }
+          }
+
+          @if (ex.run.blocked && ex.run.answer) {
+            <article class="final-answer blocked-answer" role="status">
+              <div class="turn-heading">
+                <span class="agent-name">⊘ Ápeiron rechazó la pregunta</span>
+                <span class="turn-round">GUARDRAIL DE ENTRADA</span>
+              </div>
+              <p>{{ ex.run.answer }}</p>
+            </article>
+          } @else if (ex.run.answer && ex.run.turns.length > 1) {
+            <article class="final-answer">
+              <div class="turn-heading">
+                <span class="agent-name">Síntesis de Ápeiron</span>
+                <span class="turn-round">RESPUESTA</span>
+              </div>
+              <app-markdown [text]="ex.run.answer" />
+            </article>
+          }
+
+          @if (ex.run.error) {
+            <p class="form-error stream-error" role="alert">{{ ex.run.error }}</p>
+          } @else if (ex.run.status === 'cancelled') {
+            <p class="working-state cancelled-note">Cancelada: se conserva lo recibido hasta ese momento.</p>
+          }
+        } @empty {
           <div class="empty-state">
             <span class="empty-mark" aria-hidden="true">∞</span>
-            <p>Elige un caso o formula una pregunta propia.</p>
+            <p class="empty-title">¿Qué quieres pensar hoy?</p>
+            <p class="empty-hint">Pregunta a un pensador o convoca un debate. Puedes seguir la conversación tantas veces como quieras.</p>
+            <div class="suggestions">
+              @for (caseStudy of suggestions; track caseStudy.id) {
+                <button class="suggestion" type="button" (click)="selectCase(caseStudy)">
+                  <span class="suggestion-mode">{{ caseStudy.mode === 'debate' ? 'Debate' : 'Consulta' }}</span>
+                  <span>{{ caseStudy.title }}</span>
+                </button>
+              }
+            </div>
           </div>
-        }
-
-        @for (turn of state.turns(); track $index) {
-          <app-turn-card
-            [turn]="turn"
-            [replied]="repliedTo($index)"
-            [evidence]="stepsOfTurn(state.steps(), turn)"
-            [reply]="$index % 2 === 1"
-            [remote]="isRemote(turn.agent)"
-          />
-        }
-
-        @for (s of liveSteps(); track $index) {
-          <p class="working-state">
-            <span class="status-dot"></span>
-            <span><strong>{{ agentLabel(s.agent) }}</strong> consultó {{ s.tool }} → «{{ excerpt(s.observation, 140) }}»</span>
-          </p>
-        }
-
-        @if (state.status() === 'running') {
-          <p class="working-state"><span class="status-dot"></span>Ápeiron está coordinando a los workers…</p>
-        }
-
-        @if (state.blocked() && state.answer()) {
-          <article class="final-answer blocked-answer" role="status">
-            <div class="turn-heading">
-              <span class="agent-name">⊘ Ápeiron rechazó la pregunta</span>
-              <span class="turn-round">GUARDRAIL DE ENTRADA</span>
-            </div>
-            <p>{{ state.answer() }}</p>
-          </article>
-        } @else if (state.answer() && state.turns().length > 1) {
-          <article class="final-answer">
-            <div class="turn-heading">
-              <span class="agent-name">Síntesis de Ápeiron</span>
-              <span class="turn-round">RESPUESTA</span>
-            </div>
-            <p>{{ state.answer() }}</p>
-          </article>
-        }
-
-        @if (state.error()) {
-          <p class="form-error stream-error" role="alert">{{ state.error() }}</p>
         }
       </section>
 
-      <form class="prompt-form" (ngSubmit)="submitQuestion()">
-        <label class="sr-only" for="question">Tu pregunta</label>
-        <textarea
-          id="question"
-          name="question"
-          [(ngModel)]="question"
-          maxlength="4000"
-          placeholder="Escribe una pregunta filosófica o científica…"
-          rows="3"
-        ></textarea>
+      <form class="composer" (ngSubmit)="submitQuestion()">
+        <div class="composer-box">
+          <label class="sr-only" for="question">Tu pregunta</label>
+          <textarea
+            #questionBox
+            id="question"
+            name="question"
+            [(ngModel)]="question"
+            maxlength="4000"
+            [placeholder]="state.thread().length ? 'Sigue la conversación…' : 'Escribe una pregunta filosófica o científica…'"
+            rows="2"
+            (keydown.enter)="onEnter($event)"
+          ></textarea>
 
-        <div class="run-options">
-          <label class="toggle" [class.toggle-on]="simulate">
-            <input type="checkbox" name="simulate" [(ngModel)]="simulate" />
-            <span class="toggle-track" aria-hidden="true"></span>
-            <span>{{ simulate ? 'Simulación · 0 tokens' : 'Modelo real · ' + model() }}</span>
-          </label>
-          @if (mode === 'debate') {
-            <label class="rounds">
-              <span>Rondas</span>
-              <select name="rounds" [(ngModel)]="rounds">
-                <option [ngValue]="1">1</option>
-                <option [ngValue]="2">2</option>
-              </select>
-            </label>
+          @if (mode() === 'debate') {
+            <div class="table-picker" role="group" aria-label="Mesa del debate (el orden de selección es el orden de palabra)">
+              <span class="picker-label">Mesa</span>
+              @for (a of agents(); track a.name) {
+                <button
+                  type="button"
+                  class="agent-chip"
+                  [class.agent-chip-on]="seat(a.name) > 0"
+                  [attr.aria-pressed]="seat(a.name) > 0"
+                  [disabled]="seat(a.name) === 0 && table().length >= maxSeats()"
+                  [attr.title]="a.role"
+                  (click)="toggleSeat(a.name)"
+                >
+                  @if (seat(a.name) > 0) { <span class="seat">{{ seat(a.name) }}</span> }
+                  {{ agentLabel(a.name) }}
+                </button>
+              }
+            </div>
           }
+
+          <div class="composer-toolbar">
+            <div class="toolbar-group">
+              <div class="segmented" role="group" aria-label="Modo de respuesta">
+                <button type="button" [class.segmented-on]="mode() === 'single'" [attr.aria-pressed]="mode() === 'single'" (click)="mode.set('single')">Consulta</button>
+                <button type="button" [class.segmented-on]="mode() === 'debate'" [attr.aria-pressed]="mode() === 'debate'" (click)="mode.set('debate')">Debate</button>
+              </div>
+
+              @if (mode() === 'single') {
+                <label class="select-field">
+                  <span class="sr-only">Interlocutor</span>
+                  <select name="agent" [ngModel]="agent()" (ngModelChange)="agent.set($event)">
+                    <option [ngValue]="null">Ápeiron elige al pensador</option>
+                    @for (a of agents(); track a.name) {
+                      <option [ngValue]="a.name">{{ agentLabel(a.name) }}</option>
+                    }
+                  </select>
+                </label>
+              } @else {
+                <div class="segmented rounds" role="group" aria-label="Rondas del debate">
+                  <span class="picker-label">Rondas</span>
+                  @for (n of roundOptions(); track n) {
+                    <button type="button" [class.segmented-on]="rounds() === n" [attr.aria-pressed]="rounds() === n" (click)="rounds.set(n)">{{ n }}</button>
+                  }
+                </div>
+              }
+            </div>
+
+            <div class="toolbar-group">
+              <label class="toggle" [class.toggle-on]="simulate()">
+                <input type="checkbox" name="simulate" [ngModel]="simulate()" (ngModelChange)="simulate.set($event)" />
+                <span class="toggle-track" aria-hidden="true"></span>
+                <span>{{ simulate() ? 'Simulación · 0 tokens' : 'Modelo real · ' + model() }}</span>
+              </label>
+              @if (state.status() === 'running') {
+                <button class="quiet-button" type="button" (click)="cancel()">Detener</button>
+              } @else {
+                <button class="primary-button send-button" type="submit" [disabled]="!canSend()" [attr.title]="sendHint()">
+                  Enviar <span aria-hidden="true">↗</span>
+                </button>
+              }
+            </div>
+          </div>
         </div>
 
-        <div class="prompt-footer">
-          <span>
-            {{ mode === 'debate' ? debateLabel() + ' · síntesis' : 'Ápeiron elige al worker' }} ·
-            {{ simulate ? 'sin coste' : estimate() }}
-          </span>
-          @if (state.status() === 'running') {
-            <button class="quiet-button" type="button" (click)="cancel()">Cancelar</button>
-          } @else {
-            <button class="primary-button send-button" type="submit" [disabled]="!question.trim()">
-              Enviar <span aria-hidden="true">↗</span>
-            </button>
-          }
-        </div>
+        <p class="composer-hint">
+          {{ planLabel() }} · {{ simulate() ? 'sin coste' : estimate() }} · Intro envía, Mayús+Intro salta de línea
+        </p>
       </form>
     </main>
-
-    <aside class="trace-panel" aria-labelledby="trace-title">
-      <div class="panel-heading">
-        <p class="eyebrow">03 / RUNTIME LANGGRAPH</p>
-        <h2 id="trace-title">Grafo en vivo</h2>
-        <p class="panel-description">Cada nodo se ilumina al ejecutarse; las líneas discontinuas son decisiones de Ápeiron.</p>
-      </div>
-
-      <app-agent-graph [run]="state.graph()" [agents]="state.topology()?.agents" />
-
-      <dl class="usage" aria-label="Consumo de la última ejecución">
-        <div><dt>Llamadas LLM</dt><dd>{{ state.usage()?.calls ?? '—' }}</dd></div>
-        <div><dt>Tokens</dt><dd>{{ state.usage() ? state.usage()!.total_tokens : '—' }}</dd></div>
-        <div><dt>Tiempo</dt><dd>{{ state.elapsedMs() ? (state.elapsedMs() / 1000).toFixed(1) + ' s' : '—' }}</dd></div>
-      </dl>
-      @if (state.usage(); as usage) {
-        <p class="usage-note">
-          @if (state.simulated()) {
-            Simulación: LLM determinista, recorrido completo sin coste.
-          } @else {
-            {{ usage.input_tokens }} entrada · {{ usage.output_tokens }} salida · {{ model() }}
-          }
-        </p>
-      }
-
-      @if (state.openedAgents().length) {
-        <p class="usage-note">
-          Agentes ejecutados (registro en Supabase):
-          @for (a of state.openedAgents(); track a.agent_id) {
-            <br />· {{ agentLabel(a.agent_id) }}: {{ a.invocations }}× · {{ a.reasoning_steps }} pasos · {{ a.tool_calls }} tools{{ a.tools_used.length ? ' (' + a.tools_used.join(', ') + ')' : '' }}{{ a.degraded ? ' · degradado' : '' }}
-          }
-        </p>
-      }
-
-      @if (state.status() !== 'idle' || state.guards().length) {
-        <section class="guard-panel" aria-label="Guardrails de la ejecución">
-          <p class="guard-title">Guardrails · {{ state.guards().length }} {{ state.guards().length === 1 ? 'intervención' : 'intervenciones' }}</p>
-          @for (g of state.guards(); track $index) {
-            <p class="guard-item" [class.guard-block]="g.action === 'block'">
-              <span aria-hidden="true">{{ g.action === 'block' ? '⊘' : '✎' }}</span>
-              <strong>{{ g.agent === 'apeiron' ? 'Ápeiron' : agentLabel(g.agent) }}</strong> · {{ describeGuard(g) }}
-            </p>
-          } @empty {
-            <p class="guard-item guard-none">Sin intervenciones: entrada, evidencia y citas pasaron los controles.</p>
-          }
-        </section>
-      }
-
-      <details class="trace-details" [open]="state.trace().length > 0 && state.trace().length < 14">
-        <summary>Traza de eventos ({{ state.trace().length }})</summary>
-        <ol class="trace-list">
-          @for (step of state.trace(); track $index) {
-            <li>
-              <span class="trace-index">{{ $index + 1 }}</span>
-              <span>{{ step.replaceAll('[', '').replaceAll(']', '') }}</span>
-            </li>
-          } @empty {
-            <li class="trace-empty">La ruta aparecerá aquí al iniciar una consulta.</li>
-          }
-        </ol>
-      </details>
-
-      <div class="trace-status">
-        <span class="status-dot" [class.status-dot-muted]="state.status() !== 'running'"></span>
-        <span>{{ state.status() === 'running' ? 'En ejecución' : state.status() === 'done' ? 'Completado' : state.status() === 'error' ? 'Con errores' : state.status() === 'cancelled' ? 'Cancelada' : 'En espera' }}</span>
-      </div>
-    </aside>
   </div>
 
   <footer class="page-footer">
@@ -266,3 +240,15 @@
     <span>Orquestador · workers ReAct · LangGraph · A2A</span>
   </footer>
 </div>
+
+<ng-template #turnsTpl let-ex>
+  @for (turn of ex.run.turns; track $index) {
+    <app-turn-card
+      [turn]="turn"
+      [single]="ex.mode === 'single'"
+      [replied]="ex.mode === 'debate' ? repliedTo(ex.run.turns, $index) : null"
+      [evidence]="stepsOfTurn(ex.run.steps, turn)"
+      [remote]="isRemote(turn.agent)"
+    />
+  }
+</ng-template>

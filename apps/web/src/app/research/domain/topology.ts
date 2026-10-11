@@ -7,6 +7,8 @@ export interface AgentResidence {
   landmark: string;
   color: string;
   epithet?: string;
+  /** Su aspecto en la Polis: una figura de `characters/manifest.json`; vacío = la de su clase. */
+  figure?: string;
 }
 
 export interface AgentInfo {

@@ -15,6 +15,9 @@ class ChatUseCasePort(Protocol):
         max_rounds: int | None = None,
         simulate: bool = False,
         agent: str | None = None,
+        *,
+        participants: list[str] | None = None,
+        conversation_id: str | None = None,
     ) -> dict[str, Any]: ...
 
     def stream(
@@ -24,4 +27,7 @@ class ChatUseCasePort(Protocol):
         max_rounds: int | None = None,
         simulate: bool = False,
         agent: str | None = None,
+        *,
+        participants: list[str] | None = None,
+        conversation_id: str | None = None,
     ) -> AsyncIterator[ChatEvent]: ...

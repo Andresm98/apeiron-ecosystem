@@ -4,12 +4,18 @@ import { excerpt } from '../../../research/domain/dialogue';
 import {
   PALETTE, PerfSample, Quality, QualityGovernor, RenderSettings, renderSettings,
 } from '../../domain/atmosphere';
-import { AGORA_ID, BEMA_RADIUS, HOME_ID, Place, agoraSeats, arrivalPoint, isWalkable, nearestPlace, toolPlaceId } from '../../domain/city-layout';
+import {
+  AGORA_ID, BEMA_RADIUS, HOME_ID, Place, agoraSeats, arrivalPoint, hostSpot, isWalkable, nearestPlace, toolPlaceId,
+} from '../../domain/city-layout';
 import { CitizenState, CoreState } from '../../domain/citizen-state';
 import { HUMAN } from '../../domain/deliberation';
+import { FigureInfo, citizenFigure, playerFigure, playerFigures } from '../../domain/figure-catalog';
+import { GREET_M, GREET_RESET_M, greeting } from '../../domain/greeting';
 import { Whereabouts, headingDeg, labelOpacity, moved } from '../../domain/hud';
 import { PolisSignal } from '../../domain/signals';
+import { attentionAt } from '../../domain/statue-motion';
 import { Atmosphere, SPEAKER_LIGHTS, Speaker, moonDirection } from './atmosphere';
+import { BlackHole } from './cosmos/black-hole';
 import { energyClock } from './cosmos/energy';
 import { Horizon } from './cosmos/horizon';
 import { CosmicSky } from './cosmos/sky';
@@ -21,16 +27,18 @@ import { Animator, RUN_SPEED, WALK_SPEED } from './avatar/animator';
 import { Character, PlayerAvatar } from './avatar/character';
 import { Gesture } from './avatar/clips';
 import { Dust } from './avatar/dust';
-import { GltfAvatar, availableCharacters } from './avatar/gltf-avatar';
-import { Citizen } from './figures';
+import { GltfAvatar } from './avatar/gltf-avatar';
+import { RiggedModel, loadFigureCatalog, loadRig } from './avatar/rigged-model';
+import { Citizen, RIG_HEIGHT, loadStatue } from './figures';
 import { PolisInput } from './input';
 import { RapierPhysics } from './physics/rapier';
 import { Walkable2D } from './physics/walkable-2d';
 import { PlacedPlan, PolisPhysics } from './physics/walkable';
-import { BuiltPlace, buildBridge, buildPlace } from './places';
+import { BuiltPlace, PlaceProps, buildBridge, buildPlace } from './places';
 import { PostPipeline } from './post/post-pipeline';
 import { batchStatic } from './world/batching';
 import { availableLandmarks, loadLandmark } from './world/gltf/loader';
+import { loadProps } from './world/gltf/props';
 
 /** Lo que la Polis muestra de la ejecución: proyección pura del estado (ADR-013). */
 export interface CitizenScene {
@@ -83,6 +91,8 @@ export interface WorldOptions {
   autoQuality?: boolean;
   reducedMotion?: boolean;
   perf?: boolean;
+  /** Figura elegida por el jugador (`characters/manifest.json`); si no está publicada, la de por defecto. */
+  figure?: string | null;
 }
 
 // Movimiento de ssanax (m/s, m/s²): caminar y correr con inercia, salto con gravedad y poco control en el aire.
@@ -105,6 +115,17 @@ const BUBBLE_MAX_S = 14;
 /** Diorama: FOV cerrado, cámara baja y cercana para sentir la escala (ADR-013 §5.1). */
 const FOV = 42;
 const PITCH = 0.2; // casi horizontal: columnas de 22 m y el cielo entran en el encuadre
+/** Inclinación mínima: por debajo de 0 la cámara mira hacia arriba (el cielo, el agujero negro, los templos). */
+const MIN_PITCH = -0.35;
+/** La cámara nunca baja de esta altura sobre el suelo de las islas, mire hacia donde mire. */
+const CAMERA_MIN_Y = 0.6;
+/** Altura a la que mira la cámara: un poco por encima de la cabeza de ssanax. */
+const HEAD_Y = 2.6;
+
+/** Mirar hacia arriba baja la cámara: el límite depende del zoom para que no se hunda en la isla. */
+function lowestPitch(distance: number, targetY: number): number {
+  return Math.max(MIN_PITCH, Math.asin(THREE.MathUtils.clamp((CAMERA_MIN_Y - targetY) / distance, -1, 1)));
+}
 const DISTANCE = 15;
 const OCCLUDED_OPACITY = 0.22;
 /** A menos de esta distancia de la cámara, lo que tapa a ssanax se oculta del todo. */
@@ -155,6 +176,15 @@ export class PolisWorld {
   private torches: Torches | null = null;
   private vegetation: Vegetation | null = null;
   private obstacles: { x: number; z: number; r: number }[] = [];
+  /** Piezas glTF que sustituyen partes procedurales (templo, serpiente); vacío hasta que cargan. */
+  private props: PlaceProps = {};
+  private blackHole: BlackHole | null = null;
+  private labelOf: (agent: string) => string = (agent) => agent;
+  /** Catálogo de figuras (una petición por mundo) y la que lleva ssanax. */
+  private figureCatalog: Promise<FigureInfo[]> | null = null;
+  private playerFigureId: string | null = null;
+  private wornFigure: string | null = null;
+  private disposed = false;
 
   private quality: Quality;
   private settings: RenderSettings;
@@ -182,6 +212,8 @@ export class PolisWorld {
   private perfFrames = 0;
   private sent: Whereabouts | null = null;
   private readonly bubbles = new Map<THREE.Object3D, Bubble>();
+  /** Saludos de los pensadores: cuántos ha hecho cada uno y si ssanax sigue a su alcance (no repite hasta que se aleje). */
+  private readonly welcomes = new Map<string, { visits: number; inside: boolean }>();
   private readonly faded = new Set<THREE.Mesh>();
 
   constructor(
@@ -191,6 +223,7 @@ export class PolisWorld {
     options: WorldOptions = {},
   ) {
     this.intro = options.intro ? 0 : 1;
+    this.playerFigureId = options.figure ?? null;
     this.playerName = playerName;
     this.quality = options.quality ?? 'medium';
     this.reducedMotion = !!options.reducedMotion;
@@ -214,6 +247,7 @@ export class PolisWorld {
     this.stardust = new Stardust(this.settings.stardust);
     this.horizon = new Horizon(this.settings.horizonRuins);
     this.scene.add(this.sky.group, this.stardust.points, this.horizon.group, this.city);
+    void this.loadProps();
 
     // ssanax: personaje con esqueleto y animación (procedural; un `ssanax.glb` riggeado lo sustituye si existe).
     this.ssanax = new Character(playerName);
@@ -225,7 +259,7 @@ export class PolisWorld {
     this.input = new PolisInput(this.renderer.domElement, {
       look: (dx, dy) => {
         this.yaw -= dx * 0.006;
-        this.pitch = THREE.MathUtils.clamp(this.pitch + dy * 0.004, 0.12, 1.25);
+        this.pitch = THREE.MathUtils.clamp(this.pitch + dy * 0.004, lowestPitch(this.distance, HEAD_Y), 1.25);
       },
       zoom: (delta) => (this.distance = THREE.MathUtils.clamp(this.distance + delta * 3, 6, 80)),
       tap: (x, y) => {
@@ -256,11 +290,12 @@ export class PolisWorld {
   setCity(places: Place[], labelOf: (agent: string) => string = (agent) => agent): void {
     this.clearCity();
     this.places = places;
+    this.labelOf = labelOf;
     const version = ++this.cityVersion;
     const agora = places.find((p) => p.id === AGORA_ID);
     const bridges = new THREE.Group();
     for (const place of places) {
-      const built = buildPlace(place);
+      const built = buildPlace(place, this.props);
       this.built.set(place.id, built);
       this.city.add(built.group);
       if (agora && place.kind !== 'agora') bridges.add(buildBridge(place, agora.radius));
@@ -291,7 +326,9 @@ export class PolisWorld {
     if (!isWalkable(places, pos.x, pos.z) || pos.lengthSq() === 0) this.travel(HOME_ID, true);
     this.setScene(this.lastScene);
     this.setBeacon(this.health);
+    this.aimBlackHole();
     void this.upgradeLandmarks(version);
+    void this.upgradeCitizens(version);
   }
 
   /** Color del Faro según la salud global del sistema; apagado si no hay datos. */
@@ -435,6 +472,7 @@ export class PolisWorld {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.cityVersion += 1; // las cargas de glTF en vuelo ya no tocan la escena
     cancelAnimationFrame(this.frame);
     this.resize.disconnect();
@@ -447,6 +485,7 @@ export class PolisWorld {
     this.post.dispose();
     this.atmosphere.dispose();
     this.sky.dispose();
+    this.blackHole?.dispose();
     this.stardust.dispose();
     this.horizon.dispose();
     dispose(this.scene);
@@ -477,10 +516,12 @@ export class PolisWorld {
     this.expireBubbles(t);
     for (const built of this.built.values()) built.animate?.(t);
     const focus = new THREE.Vector3(0, 0, 0);
+    this.receiveVisitor();
     for (const citizen of this.citizens.values()) citizen.update(dt, t, focus);
     this.effects.update(dt);
     energyClock.value = t;
     this.sky.update(dt, t, this.camera);
+    this.blackHole?.update(this.camera);
     this.stardust.update(t, this.camera, this.renderer.getPixelRatio());
     this.horizon.update(dt);
     this.torches?.update(t);
@@ -505,6 +546,7 @@ export class PolisWorld {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.settings.pixelRatioMax));
     this.atmosphere.apply(this.settings, this.renderer);
     this.post.configure(this.settings);
+    if (this.blackHole) this.blackHole.group.visible = this.settings.blackHole;
     this.rebuildVolume();
     this.fit();
   }
@@ -653,30 +695,54 @@ export class PolisWorld {
   }
 
   /** Si se publica `ssanax.glb` (riggeado, con clips), sustituye al procedural sin perder posición ni estado. */
+  /** Catálogo de figuras publicadas, pedido una vez por mundo. */
+  private figures(): Promise<FigureInfo[]> {
+    this.figureCatalog ??= loadFigureCatalog();
+    return this.figureCatalog;
+  }
+
+  /** Aspectos que puede llevar ssanax (los personajes animados del catálogo), para el selector del HUD. */
+  async playerFigures(): Promise<FigureInfo[]> {
+    return playerFigures(await this.figures());
+  }
+
+  /** Cambia el aspecto de ssanax sin perder posición ni estado. */
+  setPlayerFigure(id: string): void {
+    this.playerFigureId = id;
+    void this.upgradeAvatar();
+  }
+
+  /** Viste a ssanax con la figura elegida (un glTF riggeado); el procedural queda si no hay ninguna o falla. */
   private async upgradeAvatar(): Promise<void> {
-    if (!(await availableCharacters()).has('ssanax')) return;
+    const figure = playerFigure(await this.figures(), this.playerFigureId);
+    if (!figure || figure.id === this.wornFigure || this.disposed) return;
     try {
-      const avatar = await GltfAvatar.load('ssanax', this.playerName);
+      const avatar = await GltfAvatar.load(figure.id, this.playerName);
+      if (this.disposed || playerFigure(await this.figures(), this.playerFigureId)?.id !== figure.id) return avatar.dispose();
       avatar.root.position.copy(this.ssanax.root.position);
       avatar.root.rotation.y = this.facing;
       this.scene.remove(this.ssanax.root);
       this.ssanax.dispose();
       this.ssanax = avatar;
+      this.wornFigure = figure.id;
+      // Sus pies, su zancada: no patinan. Una figura sin zancada declarada usa la del rig procedural.
+      if (avatar.stride) this.animator.setStride(avatar.stride);
+      else this.animator.resetStride();
       this.decoratePlayer();
       this.scene.add(avatar.root);
       this.setScene(this.lastScene);
     } catch (e) {
-      console.warn('avatar_fallback', { error: e instanceof Error ? e.message : String(e) });
+      console.warn('avatar_fallback', { figure: figure.id, error: e instanceof Error ? e.message : String(e) });
     }
   }
 
   private placeCamera(blend: number): void {
     const target = this.ssanax.root.position.clone();
-    target.y = 2.6 + target.y * 0.6; // un poco por encima de la cabeza; al saltar acompaña sin tirones
+    target.y = HEAD_Y + target.y * 0.6; // un poco por encima de la cabeza; al saltar acompaña sin tirones
     // Introducción: de la vista aérea de la ciudad a la espalda de ssanax, con salida suave (easeInOutCubic).
     const k = this.intro < 0.5 ? 4 * this.intro ** 3 : 1 - (-2 * this.intro + 2) ** 3 / 2;
-    const pitch = THREE.MathUtils.lerp(INTRO_FROM.pitch, this.pitch, k);
     const distance = THREE.MathUtils.lerp(INTRO_FROM.distance, this.distance, k);
+    const pitch = Math.max(THREE.MathUtils.lerp(INTRO_FROM.pitch, this.pitch, k), lowestPitch(distance, target.y));
     const yaw = this.yaw + (1 - k) * 0.9;
     const offset = new THREE.Vector3(
       Math.sin(yaw) * Math.cos(pitch),
@@ -818,6 +884,30 @@ export class PolisWorld {
    * Sustituye los landmarks procedurales por sus glTF cuando el manifiesto los publica (ADR-013 §5.5). Si alguno
    * declara colisionadores `fixed_*`, la física pasa a Rapier; si una carga falla, queda el procedural.
    */
+  /**
+   * Figura de cada ciudadano: la que declara su manifiesto (`[residence] figure`), estatua viva o personaje animado;
+   * si no declara ninguna o no está publicada, la estatua de mármol; sin catálogo, la figura de cono.
+   */
+  private async upgradeCitizens(version: number): Promise<void> {
+    const catalog = await this.figures();
+    await Promise.all([...this.citizens].map(async ([name, citizen]) => {
+      const figure = citizenFigure(catalog, this.places.find((p) => p.agent === name)?.figure);
+      if (!figure) return; // sin figuras publicadas: la figura procedural
+      try {
+        if (figure.kind === 'statue') {
+          const statue = await loadStatue(figure.id);
+          if (version === this.cityVersion) citizen.useStatue(statue);
+        } else {
+          const rig = new RiggedModel(await loadRig(figure.id), RIG_HEIGHT);
+          if (version === this.cityVersion) citizen.useRig(rig);
+          else rig.dispose();
+        }
+      } catch (e) {
+        console.warn('citizen_fallback', { agent: name, figure: figure.id, error: e instanceof Error ? e.message : String(e) });
+      }
+    }));
+  }
+
   private async upgradeLandmarks(version: number): Promise<void> {
     const available = await availableLandmarks();
     if (!available.size || version !== this.cityVersion) return;
@@ -853,14 +943,68 @@ export class PolisWorld {
     }
   }
 
+  /**
+   * Los pensadores reciben a ssanax: en su sitio y sin trabajar, despiertan al acercarse (se elevan, se iluminan y lo
+   * miran) y le saludan con un bocadillo. Nunca durante una deliberación ni encima de un turno real.
+   */
+  private receiveVisitor(): void {
+    const at = this.ssanax.root.position;
+    for (const [name, citizen] of this.citizens) {
+      const place = this.places.find((p) => p.agent === name);
+      const busy = citizen.state === 'working' || citizen.state === 'using_tool';
+      const home = place && citizen.resting && citizen.position.distanceTo(this.homeSpot(place)) < 1.5;
+      const free = !!home && !busy && !this.lastScene.summoned.includes(name);
+      const distance = Math.hypot(at.x - citizen.position.x, at.z - citizen.position.z);
+      citizen.attend(free ? attentionAt(distance) : 0, at);
+      const welcome = this.welcomes.get(name) ?? { visits: 0, inside: false };
+      if (distance > GREET_RESET_M) welcome.inside = false;
+      else if (free && distance < GREET_M && !welcome.inside && !this.bubbles.has(citizen.figure.root)) {
+        welcome.inside = true;
+        this.say(name, greeting(this.playerName, place?.epithet, welcome.visits++));
+      }
+      this.welcomes.set(name, welcome);
+    }
+  }
+
   private homeSpot(place: Place): THREE.Vector3 {
-    const d = Math.hypot(place.x, place.z) || 1;
-    const k = place.radius * 0.45;
-    return new THREE.Vector3(place.x - (place.x / d) * k, 0, place.z - (place.z / d) * k);
+    const spot = hostSpot(place);
+    return new THREE.Vector3(spot.x, 0, spot.z);
+  }
+
+  /**
+   * Piezas glTF (ADR-013 §5.5): el templo y la serpiente sustituyen a sus equivalentes procedurales, así que la
+   * ciudad se reconstruye con ellas al llegar; el agujero negro se suma al cielo.
+   */
+  private async loadProps(): Promise<void> {
+    await Promise.all([this.loadCityProps(), this.loadSkyProps()]);
+  }
+
+  private async loadCityProps(): Promise<void> {
+    const loaded = await loadProps(['temple', 'serpent']);
+    if (this.disposed || (!loaded.temple && !loaded.serpent)) return;
+    this.props = { temple: loaded.temple, serpent: loaded.serpent };
+    if (this.places.length) this.setCity(this.places, this.labelOf);
+  }
+
+  /** El agujero negro (8 MB) llega por su cuenta: no retrasa los templos ni la serpiente. */
+  private async loadSkyProps(): Promise<void> {
+    const loaded = await loadProps(['black_hole']);
+    if (this.disposed || !loaded.black_hole) return;
+    this.blackHole = new BlackHole(loaded.black_hole, this.renderer);
+    this.blackHole.group.visible = this.settings.blackHole;
+    this.scene.add(this.blackHole.group);
+    this.aimBlackHole();
+  }
+
+  /** El agujero negro cuelga en la dirección de la casa al ágora: desde casa, sobre el ágora. */
+  private aimBlackHole(): void {
+    const home = this.places.find((p) => p.id === HOME_ID);
+    if (home && this.blackHole) this.blackHole.aim(-home.x, -home.z);
   }
 
   private clearCity(): void {
     for (const root of [...this.bubbles.keys()]) this.dropBubble(root);
+    for (const welcome of this.welcomes.values()) welcome.inside = false; // su bocadillo se acaba de borrar
     this.faded.clear();
     for (const citizen of this.citizens.values()) {
       this.scene.remove(citizen.figure.root);
